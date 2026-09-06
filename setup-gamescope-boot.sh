@@ -20,6 +20,11 @@
 #      instead of dropping to the greeter.
 #
 # Safe to re-run: it is idempotent and backs up files before editing.
+#
+# Optionally also offers to install the official Valve "Vapor" KDE Plasma
+# theme (colors, icons, wallpapers, Plasma look-and-feel package) used on
+# real SteamOS, pulled directly from Valve's own package mirror, so the
+# desktop side matches the gamescope side visually.
 
 set -uo pipefail
 
@@ -27,10 +32,10 @@ set -uo pipefail
 
 c_reset="\033[0m"; c_bold="\033[1m"; c_green="\033[32m"; c_yellow="\033[33m"; c_red="\033[31m"; c_cyan="\033[36m"
 
-info()  { echo -e "${c_cyan}==>${c_reset} $*"; }
-ok()    { echo -e "${c_green}✔${c_reset} $*"; }
-warn()  { echo -e "${c_yellow}!${c_reset} $*"; }
-err()   { echo -e "${c_red}✘ $*${c_reset}" >&2; }
+info()  { echo -e "${c_cyan}[INFO]${c_reset} $*"; }
+ok()    { echo -e "${c_green}[OK]${c_reset} $*"; }
+warn()  { echo -e "${c_yellow}[WARN]${c_reset} $*"; }
+err()   { echo -e "${c_red}[ERROR] $*${c_reset}" >&2; }
 ask_yn() {
     local prompt="$1" default="${2:-y}" reply
     local hint="[Y/n]"; [[ "$default" == "n" ]] && hint="[y/N]"
@@ -56,6 +61,187 @@ backup_file() {
         info "Backed up $f -> ${f}.bak-gamescope-wizard"
     fi
 }
+
+create_desktop_shortcut() {
+    # Determine the home directory of the target user
+    local user_home
+    user_home=$(eval echo "~$TARGET_USER")
+
+    # Locate the correct Desktop directory
+    local desktop_dir
+    if [[ -f "$user_home/.config/user-dirs.dirs" ]]; then
+        desktop_dir=$(grep '^XDG_DESKTOP_DIR=' "$user_home/.config/user-dirs.dirs" | cut -d '"' -f 2)
+        desktop_dir="${desktop_dir/\$HOME/$user_home}"
+    fi
+    desktop_dir="${desktop_dir:-$user_home/Desktop}"
+
+    # Ensure secure icon path and desktop directories exist
+    local secure_icon_dir="$user_home/.local/share/icons/hicolor/scalable/apps"
+    mkdir -p "$secure_icon_dir"
+    mkdir -p "$desktop_dir"
+
+    # 1. Safely copy the icon to the user's permanent theme directory
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+    if [[ -f "$script_dir/icons/steam-gaming-return.svg" ]]; then
+        info "Copying icon asset to permanent system theme path..."
+        cp "$script_dir/icons/steam-gaming-return.svg" "$secure_icon_dir/steam-gaming-return.svg"
+        chown "$TARGET_USER:$TARGET_USER" "$secure_icon_dir/steam-gaming-return.svg"
+    else
+        warn "Icon asset not found at $script_dir/icons/steam-gaming-return.svg - Shortcut will use fallback fallback."
+    fi
+
+    # 2. Generate the .desktop shortcut with instant session switcher strings
+    local shortcut_path="$desktop_dir/Return to Gaming Mode.desktop"
+    info "Creating 'Return to Gaming Mode' desktop shortcut at: $shortcut_path"
+
+    cat << EOF > "$shortcut_path"
+[Desktop Entry]
+Name=Return to Gaming Mode
+Comment=Switch session back to Gamescope
+Exec=steamos-session-select gamescope && sudo systemctl start sync-steamos-session.service && sudo systemctl restart plasmalogin
+Icon=steam-gaming-return
+Terminal=false
+Type=Application
+Categories=System;
+EOF
+
+    # Fix permissions for the target user and KDE Plasma desktop ecosystem
+    chmod +x "$shortcut_path"
+    chown "$TARGET_USER:$TARGET_USER" "$shortcut_path"
+
+    # Refresh the system icon cache so Plasma detects the standalone asset immediately
+    gtk-update-icon-cache -f -t "$user_home/.local/share/icons/hicolor" 2>/dev/null || true
+
+    ok "Desktop shortcut created successfully."
+}
+
+install_vapor_theme() {
+    # Installs Valve's official SteamOS "Vapor" Plasma theme (color scheme,
+    # Plasma look-and-feel package, wallpapers, icons) straight from Valve's
+    # own SteamOS package mirror, into the current user's ~/.local/share.
+    # This only touches the invoking user's home directory, never system
+    # files, so it's independent from everything else this script does.
+    local pkg_ver="0.29"
+    local domain="https://steamdeck-packages.steamos.cloud"
+    local path_dir="archlinux-mirror/jupiter-main/os/x86_64"
+    local file_name="steamdeck-kde-presets-${pkg_ver}-1-any.pkg.tar.zst"
+    local url="${domain}/${path_dir}/${file_name}"
+    local tmp_dir
+    tmp_dir="$(mktemp -d)"
+
+    info "Downloading official SteamOS Vapor presets (v${pkg_ver})..."
+    if ! curl -fL "$url" -o "${tmp_dir}/presets.tar.zst"; then
+        err "Download failed. Valve may have moved/renamed this package;"
+        err "check ${domain} for the current version and update pkg_ver in the script."
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    info "Extracting package contents..."
+    if ! tar -I unzstd -xf "${tmp_dir}/presets.tar.zst" -C "$tmp_dir"; then
+        err "Extraction failed (is 'zstd' installed? try: sudo pacman -S --needed zstd)"
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    info "Creating local configuration directories..."
+    mkdir -p ~/.local/share/color-schemes \
+             ~/.local/share/plasma/desktoptheme \
+             ~/.local/share/plasma/look-and-feel \
+             ~/.local/share/wallpapers \
+             ~/.local/share/icons/hicolor/scalable/apps \
+             ~/.local/share/icons/hicolor/48x48/apps
+
+    info "Installing Steam Deck theme assets..."
+    [[ -d "${tmp_dir}/usr/share/color-schemes" ]] && cp -r "${tmp_dir}/usr/share/color-schemes/"* ~/.local/share/color-schemes/
+    [[ -d "${tmp_dir}/usr/share/plasma/desktoptheme/Vapor" ]] && cp -r "${tmp_dir}/usr/share/plasma/desktoptheme/Vapor" ~/.local/share/plasma/desktoptheme/
+    [[ -d "${tmp_dir}/usr/share/plasma/look-and-feel/com.valve.vapor.desktop" ]] && cp -r "${tmp_dir}/usr/share/plasma/look-and-feel/com.valve.vapor.desktop" ~/.local/share/plasma/look-and-feel/
+    [[ -d "${tmp_dir}/usr/share/wallpapers" ]] && cp -r "${tmp_dir}/usr/share/wallpapers/"* ~/.local/share/wallpapers/
+    [[ -d "${tmp_dir}/usr/share/icons/hicolor" ]] && cp -r "${tmp_dir}/usr/share/icons/hicolor/"* ~/.local/share/icons/hicolor/
+
+    # ---------- Integrated: Copy project icon to system icons ----------
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE}")" && pwd)"
+    local target_icon_name="steamdeck-gaming-return.svg"
+
+    if [[ -d "$script_dir/icons" ]]; then
+        info "Copying local Steam Deck logo assets from project icons folder into system paths..."
+        cp "$script_dir/icons/$target_icon_name" ~/.local/share/icons/hicolor/scalable/apps/ 2>/dev/null || true
+        cp "$script_dir/icons/$target_icon_name" ~/.local/share/icons/hicolor/48x48/apps/ 2>/dev/null || true
+    else
+        warn "No local './icons' folder found next to the script - skipping custom menu icon assignment."
+    fi
+
+    local metadata_dir="$HOME/.local/share/plasma/look-and-feel/com.valve.vapor.desktop"
+    if [[ -d "$metadata_dir" ]]; then
+        info "Patching look-and-feel metadata for Plasma 6 compatibility..."
+        mkdir -p "$metadata_dir/contents"
+        echo '{"KPlugin": {"Id": "com.valve.vapor.desktop", "Name": "Vapor (Steam Deck)", "ServiceTypes": ["Plasma/LookAndFeel"]}}' > "$metadata_dir/metadata.json"
+    fi
+
+    info "Cleaning up temporary files..."
+    rm -rf "$tmp_dir"
+
+    # ---------- Integrated: Update Application Launcher Icon ----------
+    local conf_file="$HOME/.config/plasma-org.kde.plasma.desktop-appletsrc"
+
+    if [[ -f "$conf_file" ]]; then
+        info "Looking for the Application Launcher applet (Kickoff/Kicker) to set the custom icon..."
+        local matches=()
+        local current_section=""
+        local current_containment=""
+        local current_applet=""
+
+        while IFS= read -r line; do
+            if [[ "$line" =~ ^\[Containments\]\[([0-9]+)\]\[Applets\]\[([0-9]+)\]$ ]]; then
+                current_containment="${BASH_REMATCH[1]}"
+                current_applet="${BASH_REMATCH[2]}"
+                current_section="applet_root"
+                continue
+            fi
+            if [[ "$line" =~ ^\[ ]]; then
+                current_section=""
+                continue
+            fi
+            if [[ "$current_section" == "applet_root" && "$line" =~ ^plugin=(org\.kde\.plasma\.(kickoff|kicker|simplemenu|homerun|application-menu))$ ]]; then
+                matches+=( "${current_containment}:${current_applet}:${BASH_REMATCH[1]}" )
+                current_section=""
+            fi
+        done < "$conf_file"
+
+        if [[ ${#matches[@]} -gt 0 ]]; then
+            for m in "${matches[@]}"; do
+                IFS=':' read -r containment applet plugin <<< "$m"
+                info "Setting launcher icon on Containment $containment / Applet $applet ($plugin)..."
+                kwriteconfig6 \
+                    --file "$conf_file" \
+                    --group Containments --group "$containment" \
+                    --group Applets --group "$applet" \
+                    --group Configuration --group General \
+                    --key icon "$target_icon_name"
+                ok "Icon set to '$target_icon_name'."
+            done
+        else
+            warn "No compatible Application Launcher applet found in panel config. Skipping icon assignment."
+        fi
+    else
+        warn "$conf_file not found. Skipping menu icon configuration."
+    fi
+    # ------------------------------------------------------
+
+    info "Refreshing Plasma environment and icon caches..."
+    gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor 2>/dev/null || true
+    kbuildsycoca6 --noincremental 2>/dev/null || true
+    rm -rf ~/.cache/plasmashell* ~/.cache/org.kde.dirmodel-qml.kcache
+    setsid plasmashell --replace >/dev/null 2>&1 &
+
+    ok "Vapor theme assets installed. Apply it under System Settings > Appearance"
+    ok "> Global Theme > Vapor (Steam Deck), next time you're in a Plasma session."
+    ok "The Application Launcher menu icon has also been updated to the Steam Deck style."
+}
+
 
 # ---------- start ----------
 
@@ -238,7 +424,30 @@ ok "Done. Current base config:"
 sudo cat "$BASE_CONF"
 echo
 
-# ---------- 9. Summary + reboot ----------
+# ---------- 9. Optional: Vapor (Steam Deck) KDE theme ----------
+
+echo
+if ask_yn "Also install Valve's official Vapor (Steam Deck) KDE theme for your desktop session?" n; then
+    if ! command -v curl >/dev/null 2>&1; then
+        warn "curl not found, installing it first..."
+        sudo pacman -S --needed curl
+    fi
+    if ! command -v unzstd >/dev/null 2>&1; then
+        warn "zstd not found, installing it first..."
+        sudo pacman -S --needed zstd
+    fi
+    install_vapor_theme || warn "Vapor theme install ran into a problem - see errors above. Your gamescope boot setup above is unaffected."
+fi
+echo
+
+
+# ---------- 10. Create Return to Gaming Mode Desktop Shortcut ----------
+
+create_desktop_shortcut
+echo
+
+
+# ---------- 11. Summary + reboot ----------
 
 echo -e "${c_bold}Setup complete.${c_reset}"
 echo "What this did:"
@@ -248,6 +457,7 @@ echo "  - Set $BASE_CONF to autologin '$TARGET_USER' into gamescope, with Relogi
 echo "  - Installed a sync bridge + systemd watcher so Steam's Switch-to-Desktop"
 echo "    (and cachyos-gamescope-autologin.service resetting back to gamescope"
 echo "    on logout) both actually take effect"
+echo "  - Optionally installed Valve's Vapor (Steam Deck) KDE theme, if you chose to"
 echo
 echo "Backups of any files this script modified were saved with a"
 echo ".bak-gamescope-wizard suffix next to the original."
