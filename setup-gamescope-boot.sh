@@ -21,6 +21,10 @@
 #
 # Safe to re-run: it is idempotent and backs up files before editing.
 #
+# Automatically configures a permanent background systemd autostart for Steam
+# and Wayland overrides so the Steam Controller virtual keyboard (Steam+X)
+# always works in desktop mode.
+#
 # Optionally also offers to install the official Valve "Vapor" KDE Plasma
 # theme (colors, icons, wallpapers, Plasma look-and-feel package) used on
 # real SteamOS, pulled directly from Valve's own package mirror, so the
@@ -82,7 +86,7 @@ create_desktop_shortcut() {
 
     # 1. Safely copy the icon to the user's permanent theme directory
     local script_dir
-    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    script_dir="$(cd "$(dirname "${BASH_SOURCE}")" && pwd)"
 
     if [[ -f "$script_dir/icons/steamdeck-gaming-return.svg" ]]; then
         info "Copying icon asset to permanent system theme path..."
@@ -147,12 +151,7 @@ install_vapor_theme() {
     fi
 
     info "Creating local configuration directories..."
-    mkdir -p ~/.local/share/color-schemes \
-             ~/.local/share/plasma/desktoptheme \
-             ~/.local/share/plasma/look-and-feel \
-             ~/.local/share/wallpapers \
-             ~/.local/share/icons/hicolor/scalable/apps \
-             ~/.local/share/icons/hicolor/48x48/apps
+    mkdir -p ~/.local/share/color-schemes              ~/.local/share/plasma/desktoptheme              ~/.local/share/plasma/look-and-feel              ~/.local/share/wallpapers              ~/.local/share/icons/hicolor/scalable/apps              ~/.local/share/icons/hicolor/48x48/apps
 
     info "Installing Steam Deck theme assets..."
     [[ -d "${tmp_dir}/usr/share/color-schemes" ]] && cp -r "${tmp_dir}/usr/share/color-schemes/"* ~/.local/share/color-schemes/
@@ -165,8 +164,6 @@ install_vapor_theme() {
         info "Copying local Steam Deck logo assets from ./icons into structured icon paths..."
         cp -r ./icons/* ~/.local/share/icons/hicolor/scalable/apps/ 2>/dev/null || true
         cp -r ./icons/* ~/.local/share/icons/hicolor/48x48/apps/ 2>/dev/null || true
-    else
-        warn "No local './icons' folder found next to the script - skipping custom logo copy (optional, not required for the theme itself)."
     fi
 
     local metadata_dir="$HOME/.local/share/plasma/look-and-feel/com.valve.vapor.desktop"
@@ -268,24 +265,6 @@ install_vapor_theme() {
         warn "Could not find extracted Vapor wallpaper file. Skipping."
     fi
 
-    # ---------- Integrated: Force Steam Deck / Controller Glyphs ----------
-    info "Configuring Gamescope Steam environment to force Steam Deck glyphs (-steamos3)..."
-
-    # Gamescope-session launches steam via environment variables or wrappers.
-    # We append or force these parameters inside the local user session config directory.
-    local steam_env_dir="$HOME/.config/environment.d"
-    mkdir -p "$steam_env_dir"
-
-    # We set the STEAM_GAMEPADUI_ARGS so the backend compositor session picks it up.
-    echo "STEAM_GAMEPADUI_ARGS=\"-gamepadui -steamos3\"" > "$steam_env_dir/99-gamescope-steam-glyphs.conf"
-
-    # Also create/update the traditional gamescope-session environment file if used by CachyOS
-    if [[ -d "$HOME/.config/gamescope-session" ]]; then
-        echo "STEAM_GAMEPADUI_ARGS=\"-gamepadui -steamos3\"" >> "$HOME/.config/gamescope-session/environment"
-    fi
-    ok "Steam UI parameters configured successfully."
-    # ------------------------------------------------------
-
     info "Refreshing Plasma environment and icon caches..."
     gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor 2>/dev/null || true
     kbuildsycoca6 --noincremental 2>/dev/null || true
@@ -294,8 +273,8 @@ install_vapor_theme() {
 
     ok "Vapor theme assets installed. Apply it under System Settings > Appearance"
     ok "> Global Theme > Vapor (Steam Deck), next time you're in a Plasma session."
-    ok "The Application Launcher icon, desktop wallpaper, and Gamescope Steam controller glyphs have been configured."
 }
+
 
 
 
@@ -338,11 +317,11 @@ if [[ "$DM" != "plasmalogin" ]]; then
 fi
 echo
 
-# ---------- 2. Install packages ----------
+# ---------- 2. Install packages (Always Runs) ----------
 
-info "Checking required packages: gamescope-session-cachyos, steam, mangohud"
+info "Checking required packages: gamescope-session-cachyos, steam, mangohud, xterm, ttf-liberation, wqy-zenhei, plasma-keyboard"
 MISSING=()
-for pkg in gamescope-session-cachyos steam mangohud; do
+for pkg in gamescope-session-cachyos steam mangohud xterm ttf-liberation wqy-zenhei plasma-keyboard; do
     pacman -Qi "$pkg" >/dev/null 2>&1 || MISSING+=("$pkg")
 done
 
@@ -367,11 +346,6 @@ ok "Directory present."
 echo
 
 # ---------- 4. Fix the base /etc/plasmalogin.conf ----------
-#
-# steam-set-session only ever writes to /etc/plasmalogin.conf.d/*.conf,
-# but the base /etc/plasmalogin.conf takes priority and, as shipped by
-# CachyOS, hardcodes Session=plasma with no User= and no Relogin=. We
-# rewrite the [Autologin] block cleanly here.
 
 BASE_CONF="/etc/plasmalogin.conf"
 info "Configuring $BASE_CONF (Session=gamescope-session.desktop, User=$TARGET_USER, Relogin=true)"
@@ -379,9 +353,6 @@ backup_file "$BASE_CONF"
 
 sudo touch "$BASE_CONF"
 
-# Strip any existing [Autologin] section (from the first [Autologin] line
-# to the next section header or EOF), then append a clean one. This is
-# safer than a series of seds for an unknown starting state.
 sudo awk '
     BEGIN { in_autologin=0 }
     /^\[Autologin\]/ { in_autologin=1; next }
@@ -410,21 +381,12 @@ ok "Cleaned."
 echo
 
 # ---------- 6. Install the sync bridge: conf.d -> base config ----------
-#
-# CachyOS's own tools (steamos-session-select, Steam's "Switch to
-# Desktop", and cachyos-gamescope-autologin.service) only ever write the
-# session choice to /etc/plasmalogin.conf.d/zz-steamos-autologin.conf.
-# Since the base config wins, we need a watcher that copies that value
-# into the base file whenever it changes.
 
 SYNC_SCRIPT="/usr/local/bin/sync-steamos-session.sh"
 info "Installing session sync bridge at $SYNC_SCRIPT"
 
 sudo tee "$SYNC_SCRIPT" > /dev/null << 'EOF'
 #!/bin/bash
-# Copies the Session= value CachyOS's steamos tools write into
-# /etc/plasmalogin.conf.d/zz-steamos-autologin.conf back into the base
-# /etc/plasmalogin.conf, which plasma-login-manager actually obeys.
 SRC="/etc/plasmalogin.conf.d/zz-steamos-autologin.conf"
 DEST="/etc/plasmalogin.conf"
 
@@ -480,6 +442,54 @@ ok "Done. Current base config:"
 sudo cat "$BASE_CONF"
 echo
 
+
+# ---------- 8b. Core SteamOS Keyboard & Glyphs Fix (Always runs) ----------
+
+info "Applying non-optional SteamOS environment & keyboard fixes..."
+steam_env_dir="$HOME/.config/environment.d"
+mkdir -p "$steam_env_dir"
+
+# 1. Force Gamescope Steam to boot into Deck mode and load Deck glyphs
+echo "STEAM_GAMEPADUI_ARGS=\"-gamepadui -steamos3\"" > "$steam_env_dir/99-gamescope-steam-glyphs.conf"
+if [[ -d "$HOME/.config/gamescope-session" ]]; then
+    echo "STEAM_GAMEPADUI_ARGS=\"-gamepadui -steamos3\"" >> "$HOME/.config/gamescope-session/environment"
+fi
+
+# 2. Prevent KDE Wayland from blocking the virtual keyboard overlay
+echo "KWIN_IM_SHOW_ALWAYS=1" > "$steam_env_dir/99-kde-virtual-keyboard.conf"
+
+# 3. Setup robust background systemd service for Steam autostart on Desktop Mode
+systemd_user_dir="$HOME/.config/systemd/user"
+mkdir -p "$systemd_user_dir"
+
+cat << 'EOF' > "$systemd_user_dir/steam-desktop-autostart.service"
+[Unit]
+Description=Steam Background Autostart for Virtual Keyboard
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/steam -silent
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target
+EOF
+
+# Clean out old .desktop shortcut so they don't fight
+rm -f "$HOME/.config/autostart/steam.desktop"
+
+# Reload user systemd context and activate the background loop
+systemctl --user daemon-reload
+systemctl --user enable steam-desktop-autostart.service
+systemctl --user start steam-desktop-autostart.service
+
+ok "Steam UI parameters and keyboard autostart deployed successfully."
+echo
+
+
 # ---------- 9. Optional: Vapor (Steam Deck) KDE theme ----------
 
 echo
@@ -513,6 +523,8 @@ echo "  - Set $BASE_CONF to autologin '$TARGET_USER' into gamescope, with Relogi
 echo "  - Installed a sync bridge + systemd watcher so Steam's Switch-to-Desktop"
 echo "    (and cachyos-gamescope-autologin.service resetting back to gamescope"
 echo "    on logout) both actually take effect"
+echo "  - Configured permanent silent Steam autostart so Steam+X works everywhere"
+echo "  - Injected -steamos3 flag to force original Steam Deck overlay glyphs"
 echo "  - Optionally installed Valve's Vapor (Steam Deck) KDE theme, if you chose to"
 echo
 echo "Backups of any files this script modified were saved with a"
