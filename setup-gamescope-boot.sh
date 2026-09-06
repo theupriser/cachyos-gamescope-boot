@@ -84,12 +84,12 @@ create_desktop_shortcut() {
     local script_dir
     script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-    if [[ -f "$script_dir/icons/steam-gaming-return.svg" ]]; then
+    if [[ -f "$script_dir/icons/steamdeck-gaming-return.svg" ]]; then
         info "Copying icon asset to permanent system theme path..."
-        cp "$script_dir/icons/steam-gaming-return.svg" "$secure_icon_dir/steam-gaming-return.svg"
-        chown "$TARGET_USER:$TARGET_USER" "$secure_icon_dir/steam-gaming-return.svg"
+        cp "$script_dir/icons/steamdeck-gaming-return.svg" "$secure_icon_dir/steamdeck-gaming-return.svg"
+        chown "$TARGET_USER:$TARGET_USER" "$secure_icon_dir/steamdeck-gaming-return.svg"
     else
-        warn "Icon asset not found at $script_dir/icons/steam-gaming-return.svg - Shortcut will use fallback fallback."
+        warn "Icon asset not found at $script_dir/icons/steamdeck-gaming-return.svg - Shortcut will use fallback fallback."
     fi
 
     # 2. Generate the .desktop shortcut with instant session switcher strings
@@ -101,7 +101,7 @@ create_desktop_shortcut() {
 Name=Return to Gaming Mode
 Comment=Switch session back to Gamescope
 Exec=steamos-session-select gamescope && sudo systemctl start sync-steamos-session.service && sudo systemctl restart plasmalogin
-Icon=steam-gaming-return
+Icon=steamdeck-gaming-return
 Terminal=false
 Type=Application
 Categories=System;
@@ -157,21 +157,16 @@ install_vapor_theme() {
     info "Installing Steam Deck theme assets..."
     [[ -d "${tmp_dir}/usr/share/color-schemes" ]] && cp -r "${tmp_dir}/usr/share/color-schemes/"* ~/.local/share/color-schemes/
     [[ -d "${tmp_dir}/usr/share/plasma/desktoptheme/Vapor" ]] && cp -r "${tmp_dir}/usr/share/plasma/desktoptheme/Vapor" ~/.local/share/plasma/desktoptheme/
-    [[ -d "${tmp_dir}/usr/share/plasma/look-and-feel/com.valve.vapor.desktop" ]] && cp -r "${tmp_dir}/usr/share/plasma/look-and-feel/com.valve.vapor.desktop" ~/.local/share/plasma/look-and-feel/
+    [[ -d "${tmp_dir}/usr/share/plasma/look-and-feel/com.valve.vapor.desktop" ]] && cp -r "${tmp_dir}/usr/share/plasma/look-and-feel/com.valve.vapor.desktop" ~/.local/share/look-and-feel/
     [[ -d "${tmp_dir}/usr/share/wallpapers" ]] && cp -r "${tmp_dir}/usr/share/wallpapers/"* ~/.local/share/wallpapers/
     [[ -d "${tmp_dir}/usr/share/icons/hicolor" ]] && cp -r "${tmp_dir}/usr/share/icons/hicolor/"* ~/.local/share/icons/hicolor/
 
-    # ---------- Integrated: Copy project icon to system icons ----------
-    local script_dir
-    script_dir="$(cd "$(dirname "${BASH_SOURCE}")" && pwd)"
-    local target_icon_name="steamdeck-gaming-return.svg"
-
-    if [[ -d "$script_dir/icons" ]]; then
-        info "Copying local Steam Deck logo assets from project icons folder into system paths..."
-        cp "$script_dir/icons/$target_icon_name" ~/.local/share/icons/hicolor/scalable/apps/ 2>/dev/null || true
-        cp "$script_dir/icons/$target_icon_name" ~/.local/share/icons/hicolor/48x48/apps/ 2>/dev/null || true
+    if [[ -d "./icons" ]]; then
+        info "Copying local Steam Deck logo assets from ./icons into structured icon paths..."
+        cp -r ./icons/* ~/.local/share/icons/hicolor/scalable/apps/ 2>/dev/null || true
+        cp -r ./icons/* ~/.local/share/icons/hicolor/48x48/apps/ 2>/dev/null || true
     else
-        warn "No local './icons' folder found next to the script - skipping custom menu icon assignment."
+        warn "No local './icons' folder found next to the script - skipping custom logo copy (optional, not required for the theme itself)."
     fi
 
     local metadata_dir="$HOME/.local/share/plasma/look-and-feel/com.valve.vapor.desktop"
@@ -184,8 +179,14 @@ install_vapor_theme() {
     info "Cleaning up temporary files..."
     rm -rf "$tmp_dir"
 
-    # ---------- Integrated: Update Application Launcher Icon ----------
+    # ---------- Integrated: Update Launcher Icon ----------
+    local icon_name="steamdeck-gaming-return"
     local conf_file="$HOME/.config/plasma-org.kde.plasma.desktop-appletsrc"
+
+    if ! find ~/.local/share/icons /usr/share/icons -iname "${icon_name}.*" 2>/dev/null | grep -q .; then
+        warn "Could not find '${icon_name}' installed anywhere under ~/.local/share/icons or /usr/share/icons."
+        warn "The launcher icon will be set anyway, but it may show as a broken icon until the file is installed."
+    fi
 
     if [[ -f "$conf_file" ]]; then
         info "Looking for the Application Launcher applet (Kickoff/Kicker) to set the custom icon..."
@@ -220,8 +221,8 @@ install_vapor_theme() {
                     --group Containments --group "$containment" \
                     --group Applets --group "$applet" \
                     --group Configuration --group General \
-                    --key icon "$target_icon_name"
-                ok "Icon set to '$target_icon_name'."
+                    --key icon "$icon_name"
+                ok "Icon set to '$icon_name'."
             done
         else
             warn "No compatible Application Launcher applet found in panel config. Skipping icon assignment."
@@ -229,6 +230,60 @@ install_vapor_theme() {
     else
         warn "$conf_file not found. Skipping menu icon configuration."
     fi
+
+    # ---------- Integrated: Set Default Vapor Wallpaper (Fixed for Plasma 6) ----------
+    local wallpaper_path="$HOME/.local/share/wallpapers/Vapor/contents/images/2560x1600.png"
+
+    if [[ ! -f "$wallpaper_path" ]]; then
+        wallpaper_path=$(find "$HOME/.local/share/wallpapers/Vapor/contents/images" -type f \( -name "*.png" -o -name "*.jpg" \) | head -n 1)
+    fi
+
+    if [[ -f "$wallpaper_path" ]]; then
+        info "Applying official Steam Deck Vapor wallpaper via D-Bus script..."
+        local dbus_cmd="
+            var allDesktops = desktops();
+            for (var i = 0; i < allDesktops.length; i++) {
+                var d = allDesktops[i];
+                d.currentConfigGroup = ['Wallpaper', 'org.kde.image', 'General'];
+                d.writeConfig('Image', 'file://${wallpaper_path}');
+            }
+        "
+        if command -v qdbus6 >/dev/null 2>&1; then
+            qdbus6 org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript "$dbus_cmd" >/dev/null 2>&1 || true
+        else
+            qdbus org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript "$dbus_cmd" >/dev/null 2>&1 || true
+        fi
+
+        if [[ -f "$conf_file" ]]; then
+            local desktop_sections=$(grep -E '^\[Containments\]\[[0-9]+\]$' "$conf_file" || true)
+            while read -r section; do
+                if [[ -n "$section" ]]; then
+                    local clean_sec=$(echo "$section" | tr -d '[]')
+                    kwriteconfig6 --file "$conf_file" --group "$clean_sec" --group Wallpaper --group org.kde.image --group General --key Image "file://${wallpaper_path}"
+                fi
+            done <<< "$desktop_sections"
+        fi
+        ok "Wallpaper path pushed to session config."
+    else
+        warn "Could not find extracted Vapor wallpaper file. Skipping."
+    fi
+
+    # ---------- Integrated: Force Steam Deck / Controller Glyphs ----------
+    info "Configuring Gamescope Steam environment to force Steam Deck glyphs (-steamos3)..."
+
+    # Gamescope-session launches steam via environment variables or wrappers.
+    # We append or force these parameters inside the local user session config directory.
+    local steam_env_dir="$HOME/.config/environment.d"
+    mkdir -p "$steam_env_dir"
+
+    # We set the STEAM_GAMEPADUI_ARGS so the backend compositor session picks it up.
+    echo "STEAM_GAMEPADUI_ARGS=\"-gamepadui -steamos3\"" > "$steam_env_dir/99-gamescope-steam-glyphs.conf"
+
+    # Also create/update the traditional gamescope-session environment file if used by CachyOS
+    if [[ -d "$HOME/.config/gamescope-session" ]]; then
+        echo "STEAM_GAMEPADUI_ARGS=\"-gamepadui -steamos3\"" >> "$HOME/.config/gamescope-session/environment"
+    fi
+    ok "Steam UI parameters configured successfully."
     # ------------------------------------------------------
 
     info "Refreshing Plasma environment and icon caches..."
@@ -239,8 +294,9 @@ install_vapor_theme() {
 
     ok "Vapor theme assets installed. Apply it under System Settings > Appearance"
     ok "> Global Theme > Vapor (Steam Deck), next time you're in a Plasma session."
-    ok "The Application Launcher menu icon has also been updated to the Steam Deck style."
+    ok "The Application Launcher icon, desktop wallpaper, and Gamescope Steam controller glyphs have been configured."
 }
+
 
 
 # ---------- start ----------
