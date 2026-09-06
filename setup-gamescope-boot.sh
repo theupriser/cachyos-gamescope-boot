@@ -84,12 +84,12 @@ create_desktop_shortcut() {
     local script_dir
     script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-    if [[ -f "$script_dir/icons/steam-gaming-return.svg" ]]; then
+    if [[ -f "$script_dir/icons/steamdeck-gaming-return.svg" ]]; then
         info "Copying icon asset to permanent system theme path..."
-        cp "$script_dir/icons/steam-gaming-return.svg" "$secure_icon_dir/steam-gaming-return.svg"
-        chown "$TARGET_USER:$TARGET_USER" "$secure_icon_dir/steam-gaming-return.svg"
+        cp "$script_dir/icons/steamdeck-gaming-return.svg" "$secure_icon_dir/steamdeck-gaming-return.svg"
+        chown "$TARGET_USER:$TARGET_USER" "$secure_icon_dir/steamdeck-gaming-return.svg"
     else
-        warn "Icon asset not found at $script_dir/icons/steam-gaming-return.svg - Shortcut will use fallback fallback."
+        warn "Icon asset not found at $script_dir/icons/steamdeck-gaming-return.svg - Shortcut will use fallback fallback."
     fi
 
     # 2. Generate the .desktop shortcut with instant session switcher strings
@@ -101,7 +101,7 @@ create_desktop_shortcut() {
 Name=Return to Gaming Mode
 Comment=Switch session back to Gamescope
 Exec=steamos-session-select gamescope && sudo systemctl start sync-steamos-session.service && sudo systemctl restart plasmalogin
-Icon=steam-gaming-return
+Icon=steamdeck-gaming-return
 Terminal=false
 Type=Application
 Categories=System;
