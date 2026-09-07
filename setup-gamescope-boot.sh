@@ -29,6 +29,13 @@
 # theme (colors, icons, wallpapers, Plasma look-and-feel package) used on
 # real SteamOS, pulled directly from Valve's own package mirror, so the
 # desktop side matches the gamescope side visually.
+#
+# On Valve Fremont hardware (DMI sys_vendor=Valve, product_name=Fremont --
+# i.e. Steam Machine / BC-250-class boards), also offers to install the
+# leds-valve DKMS driver from the AUR so the front LED bar is exposed under
+# /sys/class/leds instead of sitting dark or "breathing" under a standard
+# desktop kernel, plus the option to pull in an experimental OpenRGB build
+# that has native support for driving it.
 
 set -uo pipefail
 
@@ -176,6 +183,15 @@ install_vapor_theme() {
     info "Cleaning up temporary files..."
     rm -rf "$tmp_dir"
 
+    # Installs Valve's official SteamOS "Vapor" Plasma theme automatically
+    # from the AUR without requiring user interactions or prompts.
+    info "Installing official SteamOS Vapor theme via yay (non-interactive)..."
+
+    if ! yay -S --noconfirm --needed --answerclean None --answerdiff None --answeredit None plasma6-themes-vapor-steamos; then
+        err "Failed to install plasma6-themes-vapor-steamos package from the AUR."
+        return 1
+    fi
+
     # ---------- Integrated: Update Launcher Icon ----------
     local icon_name="steamdeck-gaming-return"
     local conf_file="$HOME/.config/plasma-org.kde.plasma.desktop-appletsrc"
@@ -271,11 +287,134 @@ install_vapor_theme() {
     rm -rf ~/.cache/plasmashell* ~/.cache/org.kde.dirmodel-qml.kcache
     setsid plasmashell --replace >/dev/null 2>&1 &
 
+     # ---------- Automatisch het Vapor thema activeren ----------
+    # info "Vapor-thema direct toepassen op de huidige desktop..."
+
+    # Activeer het globale Plasma look-and-feel thema
+    if command -v lookandfeeltool >/dev/null 2>&1; then
+        lookandfeeltool -a com.valve.vapor.desktop || true
+    fi
+
+    # Zorg dat de iconen en kleurschema's expliciet naar Vapor overschakelen
+    kwriteconfig6 --file kdeglobals --group Icons --key Theme "Vapor"
+    kwriteconfig6 --file kdeglobals --group General --key ColorScheme "Vapor"
+
+    # Forceer Plasma om de nieuwe instellingen direct in te laden
+    qdbus6 org.kde.KWin /KWin org.kde.KWin.reconfigure >/dev/null 2>&1 || true
+
     ok "Vapor theme assets installed. Apply it under System Settings > Appearance"
     ok "> Global Theme > Vapor (Steam Deck), next time you're in a Plasma session."
 }
 
 
+detect_valve_fremont() {
+    # Valve Steam Machine / BC-250-class boards report these DMI strings.
+    # Standard desktop kernels (including CachyOS's) lack the leds-valve
+    # driver, so the front LED bar just goes dark or breathes on idle.
+    local vendor product
+    vendor="$(cat /sys/class/dmi/id/sys_vendor 2>/dev/null || true)"
+    product="$(cat /sys/class/dmi/id/product_name 2>/dev/null || true)"
+    [[ "$vendor" == "Valve" && "$product" == "Fremont" ]]
+}
+
+aur_noninteractive_flags() {
+    # Fully non-interactive install flags for the given AUR helper: no
+    # PKGBUILD diff/edit/cleanbuild prompts, no provider-selection prompts
+    # (e.g. picking kernel headers for DKMS), and makepkg itself silenced.
+    case "$1" in
+        yay)
+            echo --needed --noconfirm --answerclean None --answerdiff None \
+                 --answeredit None --mflags "--noconfirm"
+            ;;
+        paru)
+            echo --needed --noconfirm --skipreview --mflags "--noconfirm"
+            ;;
+    esac
+}
+
+bootstrap_yay() {
+    # Builds and installs yay from the AUR using only makepkg + base-devel
+    # (both from the official repos), so we have an AUR helper available
+    # without assuming the user already set one up.
+    info "Installing base-devel and git (needed to build an AUR helper)..."
+    sudo pacman -S --needed --noconfirm base-devel git || return 1
+
+    local tmp_dir
+    tmp_dir="$(mktemp -d)"
+    info "Cloning yay-bin from the AUR..."
+    if ! git clone --depth 1 https://aur.archlinux.org/yay-bin.git "$tmp_dir/yay-bin"; then
+        err "Failed to clone yay-bin from the AUR."
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    info "Building and installing yay (this runs makepkg as your user, not root)..."
+    if (cd "$tmp_dir/yay-bin" && makepkg -si --noconfirm); then
+        ok "yay installed."
+        rm -rf "$tmp_dir"
+        return 0
+    else
+        err "Building yay failed. See errors above."
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+}
+
+install_valve_led_driver() {
+    # Installs the leds-valve DKMS driver from the AUR so the front LED
+    # bar is exposed under /sys/class/leds, then offers the two known
+    # ways to get Steam to actually drive it (gamepadui, which this
+    # script already forces via STEAM_GAMEPADUI_ARGS, or OpenRGB's
+    # experimental build which has native support for the panel).
+    # Assumes an AUR helper was already ensured back in step 2.
+    local aur_helper=""
+    if command -v yay >/dev/null 2>&1; then
+        aur_helper="yay"
+    elif command -v paru >/dev/null 2>&1; then
+        aur_helper="paru"
+    fi
+
+    if [[ -z "$aur_helper" ]]; then
+        warn "No AUR helper available - can't install leds-valve-dkms-git."
+        warn "Install one yourself, then run: yay -S leds-valve-dkms-git"
+        return 1
+    fi
+
+    if ! pacman -Qi leds-valve-dkms-git >/dev/null 2>&1; then
+        info "Installing leds-valve-dkms-git from the AUR via $aur_helper (non-interactive)..."
+        local -a flags
+        read -ra flags <<< "$(aur_noninteractive_flags "$aur_helper")"
+        "$aur_helper" -S "${flags[@]}" leds-valve-dkms-git
+    else
+        ok "leds-valve-dkms-git already installed."
+    fi
+
+    info "Loading the leds-valve kernel module..."
+    if sudo modprobe leds-valve 2>/dev/null; then
+        ok "Module loaded."
+    else
+        warn "modprobe leds-valve failed - a reboot is often needed to pick up a freshly built DKMS module."
+    fi
+
+    if ls /sys/class/leds/ 2>/dev/null | grep -qi valve; then
+        ok "LED bar nodes detected: $(ls /sys/class/leds/ | grep -i valve | tr '\n' ' ')"
+    else
+        warn "No valve-led nodes under /sys/class/leds/ yet. Reboot, then check with:"
+        warn "  ls /sys/class/leds/ | grep -i valve"
+    fi
+
+    echo
+    info "Steam only pushes download progress to the LED bar in real SteamOS Game Mode."
+    # info "On a desktop install you have two options:"
+    # info "  1) Launch Steam's Big Picture UI (this script's -gamepadui -steamos3 flag already covers this)"
+    # info "  2) Install an experimental/git OpenRGB build from the AUR, which natively detects this panel"
+    # if ask_yn "Also install the experimental OpenRGB build from the AUR now?" n; then
+        local -a flags
+        read -ra flags <<< "$(aur_noninteractive_flags "$aur_helper")"
+        "$aur_helper" -S "${flags[@]}" openrgb-git
+        # ok "openrgb-git installed. Launch OpenRGB to detect and configure the front panel."
+    # fi
+}
 
 
 # ---------- start ----------
@@ -337,6 +476,17 @@ else
     ok "All required packages already installed."
 fi
 echo
+
+if detect_valve_fremont; then
+    info "Detected Valve Fremont hardware - checking for an AUR helper (needed for leds-valve-dkms-git)"
+    if command -v yay >/dev/null 2>&1 || command -v paru >/dev/null 2>&1; then
+        ok "AUR helper already present."
+    else
+        info "No AUR helper (yay/paru) found. Installing yay..."
+        bootstrap_yay || warn "Couldn't set up an AUR helper automatically. You can install one yourself later and run: yay -S leds-valve-dkms-git"
+    fi
+    echo
+fi
 
 # ---------- 3. Ensure plasmalogin.conf.d exists (fixes Switch-to-Desktop crash) ----------
 
@@ -490,6 +640,18 @@ ok "Steam UI parameters and keyboard autostart deployed successfully."
 echo
 
 
+# ---------- 8c. Valve Fremont hardware: front LED bar driver ----------
+
+# if detect_valve_fremont; then
+#     echo
+#     info "Detected Valve Fremont hardware (Steam Machine / BC-250-class board)."
+#     if ask_yn "Set up the front-panel LED bar driver (leds-valve) so it isn't stuck dark/breathing?" y; then
+#         install_valve_led_driver || warn "LED driver setup ran into a problem - see errors above. Your gamescope boot setup above is unaffected."
+#     fi
+#     echo
+# fi
+
+
 # ---------- 9. Optional: Vapor (Steam Deck) KDE theme ----------
 
 echo
@@ -526,6 +688,7 @@ echo "    on logout) both actually take effect"
 echo "  - Configured permanent silent Steam autostart so Steam+X works everywhere"
 echo "  - Injected -steamos3 flag to force original Steam Deck overlay glyphs"
 echo "  - Optionally installed Valve's Vapor (Steam Deck) KDE theme, if you chose to"
+echo "  - On Valve Fremont hardware, optionally set up the leds-valve front LED bar driver"
 echo
 echo "Backups of any files this script modified were saved with a"
 echo ".bak-gamescope-wizard suffix next to the original."
