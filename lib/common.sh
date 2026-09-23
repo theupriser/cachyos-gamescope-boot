@@ -26,6 +26,18 @@ require_root_helper() {
     fi
 }
 
+plasma_applets() {
+    # Print "containment:applet" for every applet of plugin $1 in the
+    # user's Plasma layout, for kwriteconfig6 --group paths.
+    local conf="$HOME/.config/plasma-org.kde.plasma.desktop-appletsrc"
+    [[ -f "$conf" ]] || return 0
+    awk -v plugin="$1" '
+        /^\[Containments\]\[[0-9]+\]\[Applets\]\[[0-9]+\]$/ { split($0, p, /[][]+/); sect = p[3] ":" p[5] }
+        /^\[/ && !/\]\[Applets\]\[[0-9]+\]$/ { sect = "" }
+        $0 == "plugin=" plugin && sect != "" { print sect }
+    ' "$conf"
+}
+
 backup_file() {
     local f="$1"
     if [[ -f "$f" && ! -f "${f}.bak-gamescope-wizard" ]]; then

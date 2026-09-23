@@ -4,18 +4,110 @@
 
 BASE_CONF="/etc/plasmalogin.conf"
 
-check_display_manager() {
-    # Step 1: warn when the login manager is not plasma-login-manager.
-    local DM
-    DM="$(systemctl show -p Id --value display-manager 2>/dev/null | sed 's/\.service$//')"
-    info "Detected display manager: ${DM:-none}"
+choose_setup_mode() {
+    # Step 1: one question decides both the login manager and locking.
+    # "Single user, no password" is SteamOS: SDDM (which CachyOS's session
+    # tools support directly, no workarounds) plus no lock screen, user
+    # switching or log out. Otherwise keep the current login manager
+    # (CachyOS's default plasma-login-manager gets the sync bridge below)
+    # and KDE's normal locking. Sets SINGLE_USER and LOGIN_MANAGER.
+    local current
+    current="$(systemctl show -p Id --value display-manager 2>/dev/null | sed 's/\.service$//')"
+    info "Detected display manager: ${current:-none}"
 
-    if [[ "$DM" != "plasmalogin" ]]; then
-        warn "This wizard was built and tested against plasma-login-manager (plasmalogin)."
-        warn "Detected display manager is '${DM:-unknown}'. SDDM setups don't need"
-        warn "most of these workarounds (SDDM's own Autologin works out of the box);"
-        warn "this script will still try, but review the output carefully."
+    echo "SteamOS is a single-user console without passwords: no login screen, no"
+    echo "lock screen, no user switching or logging out - typing a password with a"
+    echo "controller is no fun. It uses the SDDM login manager for that."
+    if ask_yn "Single user, no password, like SteamOS? (switches to SDDM)" y; then
+        SINGLE_USER=true
+        LOGIN_MANAGER="sddm"
+        return
+    fi
+
+    SINGLE_USER=false
+    if [[ "$current" == "sddm" ]]; then
+        LOGIN_MANAGER="sddm"
+        return
+    fi
+    LOGIN_MANAGER="plasmalogin"
+    if [[ "$current" != "plasmalogin" ]]; then
+        warn "The workarounds are built for plasma-login-manager, but '${current:-unknown}' is active."
         ask_yn "Continue anyway?" n || exit 0
+    fi
+}
+
+setup_login_manager() {
+    # Steps 3-8 for whichever login manager was chosen in step 1.
+    case "$LOGIN_MANAGER" in
+        sddm)
+            switch_to_sddm || exit 1
+            configure_sddm_autologin
+            remove_session_sync
+            ;;
+        plasmalogin)
+            configure_autologin
+            install_session_sync
+            ;;
+    esac
+}
+
+switch_to_sddm() {
+    # Takes effect at the next boot; the running session is left alone.
+    info "Installing and enabling SDDM..."
+    sudo pacman -S --needed --noconfirm sddm || { err "Installing sddm failed."; return 1; }
+    local current
+    current="$(systemctl show -p Id --value display-manager 2>/dev/null)"
+    if [[ -n "$current" && "$current" != "sddm.service" ]]; then
+        sudo systemctl disable "$current"
+    fi
+    sudo systemctl enable -f sddm.service || { err "Enabling sddm failed."; return 1; }
+    ok "SDDM is the login manager from the next boot on."
+    echo
+}
+
+configure_sddm_autologin() {
+    # User= and Relogin= live in our own fragment; steam-set-session keeps
+    # Session= up to date in zz-steamos-autologin.conf, which sorts later
+    # and so wins. /etc/sddm.conf is read last, so any [Autologin] there
+    # would override both and is removed.
+    local conf="/etc/sddm.conf.d/10-gamescope-autologin.conf"
+    info "Configuring SDDM autologin for $TARGET_USER into gamescope (Relogin=true)"
+    sudo mkdir -p /etc/sddm.conf.d
+    sudo tee "$conf" > /dev/null << EOF
+[Autologin]
+User=$TARGET_USER
+Session=gamescope-session.desktop
+Relogin=true
+EOF
+
+    if [[ -f /etc/sddm.conf ]] && grep -q '^\[Autologin\]' /etc/sddm.conf; then
+        backup_file /etc/sddm.conf
+        sudo awk '
+            /^\[Autologin\]/ { skip=1; next }
+            /^\[/ { skip=0 }
+            !skip { print }
+        ' /etc/sddm.conf | sudo tee /etc/sddm.conf.tmp > /dev/null &&
+            sudo mv /etc/sddm.conf.tmp /etc/sddm.conf
+        info "Removed [Autologin] from /etc/sddm.conf (backup kept)."
+    fi
+
+    # Start in gamescope, through CachyOS's own tool so its file is current.
+    sudo /usr/lib/steamos/steam-set-session gamescope-session.desktop
+
+    ok "SDDM autologin configured:"
+    cat "$conf"
+    echo
+}
+
+remove_session_sync() {
+    # The plasmalogin sync bridge from an earlier run isn't needed on SDDM.
+    if [[ -f /etc/systemd/system/sync-steamos-session.path ]]; then
+        info "Removing the plasma-login-manager sync bridge (not needed with SDDM)..."
+        sudo systemctl disable --now sync-steamos-session.path 2>/dev/null
+        sudo rm -f /etc/systemd/system/sync-steamos-session.path \
+            /etc/systemd/system/sync-steamos-session.service \
+            /usr/local/bin/sync-steamos-session.sh
+        sudo systemctl daemon-reload
     fi
 }
 

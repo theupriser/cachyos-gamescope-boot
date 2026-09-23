@@ -103,12 +103,13 @@ install_vapor_theme() {
     [[ -d "${tmp_dir}/usr/share/plasma/avatars" ]] && cp -r "${tmp_dir}/usr/share/plasma/avatars/"* ~/.local/share/plasma/avatars/
 
     # Valve's SteamOS desktop defaults (fonts, Steam keyboard window rule,
-    # no screen locking, no welcome screen, light file indexing, GTK theme).
+    # no welcome screen, light file indexing, GTK theme).
     # Left out on purpose: autostart entries (Steam is started by our user
     # unit), sddm/profile.d, and files hardcoding /home/deck or SteamOS tools.
     info "Applying SteamOS desktop defaults..."
     local f
-    for f in kdeglobals kwinrc kwinrulesrc kscreenlockerrc kded5rc baloofilerc kcminputrc; do
+    # kscreenlockerrc is left to the single-user question.
+    for f in kdeglobals kwinrc kwinrulesrc kded5rc baloofilerc kcminputrc; do
         [[ -f "${tmp_dir}/etc/xdg/$f" ]] && merge_kde_config "${tmp_dir}/etc/xdg/$f" "$f"
     done
     [[ -f "${tmp_dir}/etc/xdg/kded5rc" ]] && merge_kde_config "${tmp_dir}/etc/xdg/kded5rc" kded6rc

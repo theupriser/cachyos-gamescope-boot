@@ -80,16 +80,18 @@ fi
 ok "Using user: $TARGET_USER"
 echo
 
-check_display_manager
+choose_setup_mode
 echo
 
 install_required_packages
 echo
 
-configure_autologin
-install_session_sync
+setup_login_manager
 
 setup_steam_desktop
+echo
+
+setup_single_user
 echo
 
 setup_led_driver
@@ -105,16 +107,21 @@ echo
 echo -e "${c_bold}Setup complete.${c_reset}"
 echo "What this did:"
 echo "  - Installed gamescope-session-cachyos, steam, mangohud and friends (if missing)"
-echo "  - Created /etc/plasmalogin.conf.d (fixes Switch-to-Desktop crash)"
-echo "  - Set $BASE_CONF to autologin '$TARGET_USER' into gamescope, with Relogin=true"
-echo "  - Installed a sync bridge + systemd watcher so Steam's Switch-to-Desktop"
-echo "    (and cachyos-gamescope-autologin.service resetting back to gamescope"
-echo "    on logout) both actually take effect"
+if [[ "$LOGIN_MANAGER" == "sddm" ]]; then
+    echo "  - Made SDDM the login manager, autologging '$TARGET_USER' into gamescope"
+    echo "    with Relogin=true, like SteamOS (active from the next boot)"
+else
+    echo "  - Created /etc/plasmalogin.conf.d (fixes Switch-to-Desktop crash)"
+    echo "  - Set $BASE_CONF to autologin '$TARGET_USER' into gamescope, with Relogin=true"
+    echo "  - Installed a sync bridge + systemd watcher so Steam's Switch-to-Desktop"
+    echo "    (and cachyos-gamescope-autologin.service resetting back to gamescope"
+    echo "    on logout) both actually take effect"
+    echo "  - Added /etc/sudoers.d/gamescope-session-switch so the desktop shortcut works"
+fi
 echo "  - Configured permanent silent Steam autostart so Steam+X works everywhere"
 echo "  - Injected -steamos3 flag to force original Steam Deck overlay glyphs"
 echo "  - Optionally installed Valve's Vapor (Steam Deck) KDE theme, if you chose to"
 echo "  - On Valve Fremont hardware, optionally set up the leds-valve front LED bar driver"
-echo "  - Added /etc/sudoers.d/gamescope-session-switch so the desktop shortcut works"
 echo
 echo "Backups of any files this script modified were saved with a"
 echo ".bak-gamescope-wizard suffix next to the original."
