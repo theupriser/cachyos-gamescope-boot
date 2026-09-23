@@ -1,0 +1,54 @@
+# Builds the single-file wizard (tools/bundle.sh) and publishes it as the
+# asset of the rolling "latest" release, for:
+#   bash <(curl -fsSL https://github.com/theupriser/cachyos-gamescope-boot/releases/download/latest/setup-gamescope-boot.sh)
+# Pull requests only build and check it.
+name: Single-file build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # for the version in the bundle's header
+
+      - name: Build
+        run: tools/bundle.sh dist/setup-gamescope-boot.sh
+
+      - name: Check
+        run: |
+          bash -n dist/setup-gamescope-boot.sh
+          # SC2034/SC2154: variables used across the inlined modules.
+          shellcheck -S warning -e SC2034,SC2154 dist/setup-gamescope-boot.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: setup-gamescope-boot
+          path: dist/setup-gamescope-boot.sh
+
+      - name: Publish to the "latest" release
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes="Single-file build of $(git describe --always) ($(git log -1 --format=%cs)).
+          Run it with:
+
+              bash <(curl -fsSL https://github.com/${{ github.repository }}/releases/download/latest/setup-gamescope-boot.sh)"
+          if gh release view latest >/dev/null 2>&1; then
+            gh release edit latest --notes "$notes"
+          else
+            gh release create latest --title "Latest single-file build" --notes "$notes" --latest
+          fi
+          # Move the tag to this commit and replace the asset.
+          git tag -f latest && git push -f origin latest
+          gh release upload latest dist/setup-gamescope-boot.sh --clobber

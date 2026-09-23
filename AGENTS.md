@@ -31,6 +31,12 @@ gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
   `krevert <component>`. Never call `kwriteconfig6` directly for settings a
   component owns. System files are backed up with `backup_file` and restored
   on disable.
+- **Single-file build.** `tools/bundle.sh` inlines `lib/*.sh` in the order of
+  the entry point's `for lib in ...; do` source loop and wraps everything
+  after that loop in `main()`. Keep that loop on one line, keep all logic in
+  functions, and don't rely on `SCRIPT_DIR` for anything but sourcing.
+  CI (`.github/workflows/bundle.yml`) publishes the bundle to the `latest`
+  release on pushes to `main`.
 
 ## Conventions
 
