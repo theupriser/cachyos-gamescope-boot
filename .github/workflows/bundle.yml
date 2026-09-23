@@ -1,6 +1,6 @@
 # Builds the single-file wizard (tools/bundle.sh) and publishes it as the
 # asset of the rolling "latest" release, for:
-#   bash <(curl -fsSL https://github.com/theupriser/cachyos-gamescope-boot/releases/download/latest/setup-gamescope-boot.sh)
+#   curl -fsSL https://github.com/theupriser/cachyos-gamescope-boot/releases/download/latest/setup-gamescope-boot.sh | bash
 # Pull requests only build and check it.
 name: Single-file build
 
@@ -43,7 +43,7 @@ jobs:
           notes="Single-file build of $(git describe --always) ($(git log -1 --format=%cs)).
           Run it with:
 
-              bash <(curl -fsSL https://github.com/${{ github.repository }}/releases/download/latest/setup-gamescope-boot.sh)"
+              curl -fsSL https://github.com/${{ github.repository }}/releases/download/latest/setup-gamescope-boot.sh | bash"
           if gh release view latest >/dev/null 2>&1; then
             gh release edit latest --notes "$notes"
           else
