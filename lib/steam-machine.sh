@@ -1,5 +1,6 @@
 #!/bin/bash
-# Valve Fremont (Steam Machine) front LED bar driver.
+# "Steam Machine support" menu item, only on Valve Fremont hardware: the
+# front LED bar driver, LED access for Steam, and steamos-manager.
 # Sourced by setup-gamescope-boot.sh; not meant to be run on its own.
 
 detect_valve_fremont() {
@@ -92,22 +93,49 @@ install_valve_led_driver() {
         warn "  ls /sys/class/leds/ | grep valve ; sudo dmesg | grep -i valve"
     fi
 
-    echo
-    info "Steam only pushes download progress to the LED bar in real SteamOS Game Mode."
-    if ask_yn "Also install the experimental OpenRGB build (openrgb-git), which can drive the LED bar?" n; then
-        "$aur_helper" -S "${flags[@]}" openrgb-git &&
-            ok "openrgb-git installed. Launch OpenRGB to detect and configure the front panel."
-    fi
 }
 
-setup_led_driver() {
-    # Step 8c: only on Fremont hardware, and only if the user wants it.
-    if detect_valve_fremont; then
-        info "Detected Valve Fremont hardware (Steam Machine)."
-        if ask_yn "Set up the front-panel LED bar driver (leds-valve) so it isn't stuck dark/breathing?" y; then
-            ensure_aur_helper || warn "Couldn't set up an AUR helper automatically. You can install one yourself later and run: yay -S leds-valve-dkms-git"
-            install_valve_led_driver || warn "LED driver setup ran into a problem - see errors above. Your gamescope boot setup above is unaffected."
-        fi
-        echo
-    fi
+LED_UDEV_RULE="/etc/udev/rules.d/70-valve-leds-user.rules"
+
+machine_available() { detect_valve_fremont; }
+
+machine_status() {
+    pacman -Qi leds-valve-dkms-git >/dev/null 2>&1 && pacman -Qi steamos-manager >/dev/null 2>&1
+}
+
+machine_enable() {
+    ensure_aur_helper || { warn "Couldn't set up an AUR helper automatically. Install yay or paru, then run the wizard again."; return 1; }
+    install_valve_led_driver || { warn "LED driver setup ran into a problem - see errors above."; return 1; }
+
+    # The LED files are root-only. Steam runs as the user; let it write them
+    # in case it drives the bar directly (Valve's own privileged-write helper
+    # doesn't cover the Steam Machine's LED bar).
+    info "Letting $TARGET_USER control the LED bar..."
+    sudo tee "$LED_UDEV_RULE" > /dev/null << EOF
+# Let the console user (and Steam) control the Steam Machine's front LED bar.
+SUBSYSTEM=="leds", KERNEL=="valve-leds*", RUN+="/usr/bin/find /sys%p -maxdepth 1 -type f -exec /usr/bin/chown $TARGET_USER {} +"
+EOF
+    sudo udevadm control --reload
+    sudo udevadm trigger --subsystem-match=leds --action=add
+
+    # steamos-manager is what Steam in gaming mode talks to for hardware
+    # settings (fan, HDMI-CEC TV control, performance); it knows the Steam
+    # Machine from its DMI data.
+    info "Installing steamos-manager (Steam Machine hardware settings in Steam)..."
+    sudo pacman -S --needed --noconfirm steamos-manager || { err "Installing steamos-manager failed."; return 1; }
+    sudo systemctl enable --now steamos-manager.service
+    systemctl --user enable steamos-manager.service 2>/dev/null
+    ok "Steam Machine support on."
+}
+
+machine_disable() {
+    info "Removing Steam Machine support..."
+    systemctl --user disable --now steamos-manager.service 2>/dev/null
+    sudo systemctl disable --now steamos-manager.service 2>/dev/null
+    sudo pacman -Rns --noconfirm steamos-manager 2>/dev/null
+    sudo rm -f "$LED_UDEV_RULE" /etc/modules-load.d/leds-valve.conf
+    sudo udevadm control --reload
+    sudo modprobe -r leds-valve 2>/dev/null
+    sudo pacman -Rns --noconfirm leds-valve-dkms-git 2>/dev/null
+    ok "Steam Machine support removed (the AUR helper, if installed, is kept)."
 }

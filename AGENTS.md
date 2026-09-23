@@ -13,11 +13,24 @@ gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
 ## Layout
 
 - `setup-gamescope-boot.sh` - the only entry point. Pre-flight checks,
-  sources `lib/*.sh`, then calls the steps in order. No step logic here.
+  sources `lib/*.sh`, runs the menu and applies the plan. No component
+  logic here.
 - `lib/*.sh` - one file per responsibility, each defining functions only
-  (no top-level side effects). See the table in `README.md`. New
-  functionality goes in the module it belongs to, or a new module that is
-  added to the `source` loop in `setup-gamescope-boot.sh`.
+  (no top-level side effects besides constants). See the table in
+  `README.md`.
+- **Components.** Every menu item `<id>` (listed in `COMPONENTS` and `LABEL`
+  in `lib/menu.sh`) provides `<id>_status` (return 0 if on, detected from
+  the system, no state file needed), `<id>_enable` and `<id>_disable`, all
+  idempotent. `<id>_enable` is also used to re-apply. Optional
+  `<id>_available` is checked via `component_available` (e.g. `machine`
+  only on Fremont). Turn-on order is `COMPONENTS` order, turn-off reverse;
+  `gaming` must stay first. Dependencies live in `toggle_component`.
+- **Reversibility.** Every per-user KDE setting a component changes goes
+  through `kset <component> <file> <group|group> <key> <value>`
+  (`lib/state.sh`), which records the old value once; `<id>_disable` calls
+  `krevert <component>`. Never call `kwriteconfig6` directly for settings a
+  component owns. System files are backed up with `backup_file` and restored
+  on disable.
 
 ## Conventions
 
@@ -41,12 +54,11 @@ gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
 
 ## Non-obvious behaviour to preserve
 
-- One wizard question in `choose_setup_mode` sets `$SINGLE_USER` and
-  `$LOGIN_MANAGER`. "Single user, no password" = SteamOS: SDDM plus no lock
-  screen, user switching or log out (`setup_single_user`; the launcher's
-  Session dropdown is hidden via kickoff `primaryActions=3` because
-  restricting `action/logout` also hides Restart/Shut Down). Otherwise the
-  current login manager stays. Two login-manager paths:
+- `apply_changes` sets `$LOGIN_MANAGER` from the menu: `sddm` when single
+  user mode is wanted, else `plasmalogin`. Toggling single user re-applies
+  `gaming` so it moves to the other login manager. Single user mode hides
+  the launcher's Session dropdown via kickoff `primaryActions=3` (restricting
+  `action/logout` also hides Restart/Shut Down). Two login-manager paths:
   **sddm** (like SteamOS: `steam-set-session` writes
   `/etc/sddm.conf.d/zz-steamos-autologin.conf`, which SDDM honours; we add
   `User=`/`Relogin=` in `10-gamescope-autologin.conf`, and `/etc/sddm.conf`
@@ -75,6 +87,9 @@ gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
   launches).
 - Live Plasma changes (`qdbus6 ... evaluateScript`, `lookandfeeltool`) only
   run when `plasmashell` is running; config-file fallbacks cover the rest.
+- plasmashell writes its in-memory config back on exit: edit panel/applet/
+  wallpaper files only between `stop_plasmashell_for_edit` and
+  `restart_plasmashell_if_stopped` (`lib/common.sh`).
 - LED driver: `leds-valve-dkms-git`'s Makefile builds against `uname -r`,
   so the script builds explicitly for the running kernel and installs
   headers for every installed kernel first. The module creates
@@ -91,21 +106,11 @@ for f in setup-gamescope-boot.sh lib/*.sh; do bash -n "$f"; done
 shellcheck -S warning setup-gamescope-boot.sh lib/*.sh   # if available
 ```
 
-Behaviour is best verified in a CachyOS VM (QEMU/KVM, KDE Plasma install,
-`plasma-login-manager`) with SSH access, reset from a disk snapshot between
-runs. Notes from doing this:
-
-- Run the script non-interactively by piping answers, e.g.
-  `printf "\ny\nn\nn\n" | ./setup-gamescope-boot.sh` (user, single user,
-  theme, reboot).
-  The prompt order depends on what's already installed.
-- Over SSH, export the session environment before running it so the live
-  Plasma steps work:
-  `XDG_RUNTIME_DIR=/run/user/$UID WAYLAND_DISPLAY=wayland-0 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$UID/bus`.
-- `spectacle -b -n -f -o shot.png` takes a screenshot to check the look.
-  Apps you launch over SSH lack the session's Qt platform theme and look
-  light; launch them with `systemd-run --user` to judge colors correctly.
-- Gamescope usually won't render in a VM (no suitable Vulkan), so test the
-  session logic with `plasma.desktop` as the autologin session. The
-  gamescope boot itself and the LED driver can only be verified on real
-  hardware.
+Behaviour is verified in a CachyOS QEMU/KVM test VM. The VM scripts and a
+Claude Code skill describing the whole test workflow (snapshots, SSH, running
+the wizard with scripted menu input such as `printf '2\n\ny\nn\n'`, the
+per-component checks; when stdin is not a terminal the menu falls back to a
+numbered prompt, which is what scripted runs use, reboot checks, the full test matrix, `--fremont` to
+fake Steam Machine hardware) live in
+[cachyos-gamescope-boot-dev-env](https://github.com/theupriser/cachyos-gamescope-boot-dev-env).
+Gamescope itself and the real LED bar can only be verified on hardware.

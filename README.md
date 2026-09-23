@@ -11,16 +11,22 @@ script fixes that and sets everything up for you.
 
 ## What you get
 
-- **Boots into gaming mode** automatically - you never see a login screen,
-  just like SteamOS.
-- **Switch to Desktop** from Steam's power menu works, and so does going
-  back: use the **Return to Gaming Mode** icon on the desktop, or just log
-  out.
-- **Back to gaming mode after a restart**, like SteamOS.
-- **Steam's on-screen keyboard** (Steam + X) also works on the desktop.
-- *Optional:* the **SteamOS desktop look** - Valve's own Vapor theme,
-  wallpaper, dark mode and taskbar.
-- *Optional, Steam Machine only:* a driver for the **front LED bar**.
+The wizard is a menu: pick what you want, and it turns each part on or off.
+Everything you turn off is put back the way it was.
+
+1. **SteamOS conversion** - boots straight into gaming mode, **Switch to
+   Desktop** in Steam works and so does going back (the **Return to Gaming
+   Mode** icon on the desktop), you're back in gaming mode after a restart,
+   and Steam's on-screen keyboard (Steam + X) also works on the desktop.
+2. **SteamOS theme** - Valve's own Vapor look for the desktop: wallpaper,
+   dark mode and the SteamOS taskbar.
+3. **Steam Deck/Machine icons** - Steam Deck button icons in gaming mode.
+4. **Single user mode** - like SteamOS: never a login or lock screen, no
+   user switching or logging out. Typing a password with a controller is no
+   fun. (Needs 1.)
+5. **Steam Machine support** - only shown on a Valve Steam Machine: the
+   driver for the front LED bar, and the hardware settings in Steam (fan,
+   TV control over HDMI-CEC).
 
 ## Requirements
 
@@ -37,31 +43,34 @@ cd <this-repo>
 ./setup-gamescope-boot.sh
 ```
 
-Run it as yourself, not as root. It asks for your password once, then asks a
-few yes/no questions:
+Run it as yourself, not as root. You'll see a checklist:
 
-- **Single user, no password, like SteamOS?** Recommended for a console.
-  You never see a login or lock screen, and there's no user switching or
-  logging out - typing a password with a controller is no fun. This
-  switches to SDDM, the login manager SteamOS uses. Say no to keep
-  CachyOS's default login manager and KDE's normal lock screen; gaming mode
-  still starts automatically.
-- whether to install missing packages;
-- the LED driver (Steam Machine only) and the SteamOS look.
+```
+   [x] SteamOS conversion: boot into gaming mode, Steam on the desktop  (now: off)
+ > [x] Install SteamOS theme: Vapor look, dark mode, SteamOS taskbar  (now: off)
+   [x] Install Steam Deck/Machine icons: Deck button icons in gaming mode  (now: off)
+   [x] Single user mode: no password, lock screen or log out (SDDM)  (now: off)
 
-At the end it offers to restart. The switch to SDDM takes effect from that
-restart.
+  Up/Down move   Space select   Enter run   a run + re-apply what's on   q quit
+```
+
+Move with the **arrow keys**, tick or untick with **Space**, and press
+**Enter** to run. "now:" shows what's on at the moment. The wizard then
+shows what it will change, asks your password once, and at the end offers
+to restart (needed for changes to how the PC starts).
+
+Run it again whenever you like - to change your choices, to turn things off
+again, or after a CachyOS update (press `a` in the menu to re-apply
+everything that's on).
 
 Keep the whole folder: the script needs the files in `lib/` next to it.
-
-It's safe to run again later, for example after a CachyOS update.
 
 ## Using it
 
 - **To the desktop:** in gaming mode, open the Steam menu and choose
   **Power > Switch to Desktop**.
 - **Back to gaming mode:** double-click **Return to Gaming Mode** on the
-  desktop (or log out, if you didn't choose single user).
+  desktop (or log out, if you're not using single user mode).
 - After a restart you always start in gaming mode.
 
 Prefer to decide yourself where your PC starts? Run one of these in Konsole:
@@ -86,42 +95,53 @@ That takes you back to the desktop.
 freshly installed driver often needs a reboot. Still dark? See
 [Front LED bar](#front-led-bar-steam-machine) under technical details.
 
-**Undo the SteamOS look:** pick another theme under **System Settings >
-Colors & Themes > Global Theme**.
-
-To remove everything the script set up, see
-[Removing everything](#removing-everything).
+**Undo something:** run the wizard again and untick it.
 
 ---
 
 ## Technical details
 
-### Single user: SDDM, no locking
+### How turning things on and off works
 
-The wizard's first question. Answering yes switches to **SDDM** and turns
-off everything that asks for a password or another user, per user and
-without touching system files: `action/lock_screen`, `switch_user` and
+At startup every component checks whether it is on (`*_status` in `lib/`).
+You choose; the wizard then turns off what you unticked (in reverse order)
+and turns on what you ticked. To be able to undo:
+
+- **System files** are backed up once, next to the original, with a
+  `.bak-gamescope-wizard` suffix, and restored when you turn the component
+  off.
+- **KDE settings** in your home directory are recorded with their previous
+  value the first time the wizard changes them, in an undo journal under
+  `~/.local/state/cachyos-gamescope-boot/`. Turning the component off writes
+  the old values back (or removes keys that didn't exist before). Setups
+  made by older versions of the script, without a journal, fall back to
+  KDE's defaults.
+- **Packages** installed for the conversion (Steam, gamescope-session, ...)
+  are kept when you turn it off; Steam Machine support removes its own.
+
+### Single user mode: SDDM, no locking
+
+Turning it on switches to **SDDM** and turns off everything that asks for a
+password or another user, per user: `action/lock_screen`, `switch_user` and
 `start_new_session` restrictions in `kdeglobals`, no automatic locking
 (`kscreenlockerrc`), Meta+L and Ctrl+Alt+Del unbound, and the launcher shows
 only Sleep / Restart / Shut Down (kickoff `primaryActions=3`), which hides
 the Session dropdown with Log Out. (Restricting `action/logout` would also
-hide Restart and Shut Down.) Answering no restores KDE's defaults and keeps
-the current login manager.
+hide Restart and Shut Down.) Turning it off restores all of that and moves
+the conversion back to plasma-login-manager.
 
-**SDDM** is what SteamOS uses, and CachyOS's
-`steam-set-session` supports it directly: it writes
-`/etc/sddm.conf.d/zz-steamos-autologin.conf`, which SDDM honours. The script
-installs and enables `sddm` (disabling the current display manager, active
-from the next boot), writes `User=`, `Session=` and `Relogin=true` to
+**SDDM** is what SteamOS uses, and CachyOS's `steam-set-session` supports it
+directly: it writes `/etc/sddm.conf.d/zz-steamos-autologin.conf`, which SDDM
+honours. The script installs and enables `sddm` (active from the next boot),
+writes `User=`, `Session=` and `Relogin=true` to
 `/etc/sddm.conf.d/10-gamescope-autologin.conf`, and removes any
 `[Autologin]` from `/etc/sddm.conf` (read last, so it would override both).
 No sync bridge or sudoers rule is needed; the shortcut just runs
-`steamos-session-select gamescope`, which logs out, and `Relogin=true`
-logs straight back in to gamescope. Switching an existing
-plasma-login-manager setup to SDDM removes the sync bridge.
+`steamos-session-select gamescope`, which logs out, and `Relogin=true` logs
+straight back in to gamescope.
 
-Keeping **plasma-login-manager** (CachyOS's default since March 2026) needs
-the workarounds below.
+Without single user mode, the conversion uses **plasma-login-manager**
+(CachyOS's default since March 2026), which needs the workarounds below.
 
 ### Why this is needed (plasma-login-manager)
 
@@ -152,34 +172,35 @@ The script sets `Session=`, `User=` and `Relogin=true` in the base config,
 and installs a small systemd path watcher that copies whatever CachyOS's
 tools write to the conf.d fragment into the base config.
 
-### What the script changes
+### What each component changes
 
-In order:
+**SteamOS conversion** (`lib/login-manager.sh`, `lib/steam-desktop.sh`,
+`lib/desktop-shortcut.sh`):
 
-1. Checks that it runs as the user that should autologin, and asks whether
-   to switch to SDDM (see above).
-2. Installs missing packages: `gamescope-session-cachyos`, `steam`,
-   `mangohud`, `xterm`, `ttf-liberation`, `wqy-zenhei`, `plasma-keyboard`.
-3. *SDDM:* installs/enables SDDM and writes its autologin config.
-   *plasma-login-manager:* creates `/etc/plasmalogin.conf.d`, backs up and rewrites the
-   `[Autologin]` section of `/etc/plasmalogin.conf`, and removes stray
-   `zzz-steamos-autologin*.conf` files from manual troubleshooting (never
-   `zz-steamos-autologin.conf`, which CachyOS's tools own).
-4. *plasma-login-manager only:* installs `/usr/local/bin/sync-steamos-session.sh` plus
-   `sync-steamos-session.path`/`.service`, which keep the base config in sync
-   with session switches.
-5. Sets up Steam for the desktop: `STEAM_GAMEPADUI_ARGS="-gamepadui -steamos3"`
-   (gamepad UI with Steam Deck glyphs), `KWIN_IM_SHOW_ALWAYS=1` for the
-   virtual keyboard, and a `steam-desktop-autostart` systemd user service
-   that starts Steam silently in Plasma only.
-6. *(Steam Machine, optional)* the LED driver - see below.
-7. *(Optional)* the SteamOS desktop look - see below.
-8. Creates the **Return to Gaming Mode** shortcut. On plasma-login-manager it
-   also adds a narrow sudoers rule (`/etc/sudoers.d/gamescope-session-switch`)
-   so it can restart the login manager without a password prompt.
+- installs missing packages: `gamescope-session-cachyos`, `steam`,
+  `mangohud`, `xterm`, `ttf-liberation`, `wqy-zenhei`, `plasma-keyboard`;
+- *SDDM (single user mode):* installs/enables SDDM and writes its autologin
+  config;
+- *plasma-login-manager:* creates `/etc/plasmalogin.conf.d`, backs up and
+  rewrites the `[Autologin]` section of `/etc/plasmalogin.conf`, removes
+  stray `zzz-steamos-autologin*.conf` files from manual troubleshooting
+  (never `zz-steamos-autologin.conf`, which CachyOS's tools own), and
+  installs `/usr/local/bin/sync-steamos-session.sh` plus
+  `sync-steamos-session.path`/`.service`;
+- `KWIN_IM_SHOW_ALWAYS=1` for the virtual keyboard and a
+  `steam-desktop-autostart` systemd user service that starts Steam silently
+  in Plasma only;
+- the **Return to Gaming Mode** shortcut; on plasma-login-manager with a
+  narrow sudoers rule (`/etc/sudoers.d/gamescope-session-switch`) so it can
+  restart the login manager without a password prompt.
 
-Re-running doesn't duplicate any settings. Every system file it modifies is
-backed up once, next to the original, with a `.bak-gamescope-wizard` suffix.
+Turning it off restores `/etc/plasmalogin.conf` from its backup, removes the
+SDDM autologin, sync bridge, shortcut, sudoers rule and Steam autostart, and
+switches back to plasma-login-manager.
+
+**Steam Deck/Machine icons:** `STEAM_GAMEPADUI_ARGS="-gamepadui -steamos3"`
+in `~/.config/environment.d/` (and gamescope-session's own environment
+file), which makes Steam show Steam Deck button glyphs in gaming mode.
 
 ### SteamOS desktop look
 
@@ -191,7 +212,7 @@ SteamOS mirror and installs it into `~/.local/share` - nothing system-wide:
 - Valve's SteamOS desktop defaults, merged into your own config: Noto Sans
   fonts, no Xwayland input-permission prompt for Steam Input, the window
   rule that keeps the Steam keyboard on top and out of the taskbar, no
-  screen locking, no welcome screen, light file indexing;
+  welcome screen, light file indexing;
 - the SteamOS panel: solid (not floating), full width, 44 px high, tray icons
   scaled to fit, date below the time, and the SteamOS launcher icon;
 - dark mode for GTK, libadwaita and portal-aware apps (Firefox, Flatpaks).
@@ -215,30 +236,47 @@ curl -fsL $m/$r/os/x86_64/$r.db | bsdtar -tf - | grep -o '^steamdeck-kde-presets
 
 ### Front LED bar (Steam Machine)
 
-Standard desktop kernels, including CachyOS's, lack Valve's `leds-valve`
-driver, so the Steam Machine's front LED bar goes dark or "breathes". On
-Fremont hardware (DMI `Valve`/`Fremont`) the script offers to:
+The **Steam Machine support** component, only shown on Fremont hardware
+(DMI `Valve`/`Fremont`, or `OEM`/`F7F` on early units):
 
-- install an AUR helper (`yay`) if neither `yay` nor `paru` is present;
-- install the kernel headers for every installed kernel;
-- install `leds-valve-dkms-git` from the AUR, build it for the running
-  kernel, and load it at every boot (`/etc/modules-load.d/leds-valve.conf`);
-- optionally install the experimental `openrgb-git`, which can drive the bar.
+- installs an AUR helper (`yay`) if neither `yay` nor `paru` is present;
+- installs the kernel headers for every installed kernel;
+- installs `leds-valve-dkms-git` from the AUR - Valve's own driver from the
+  SteamOS kernel - builds it for the running kernel, and loads it at every
+  boot (`/etc/modules-load.d/leds-valve.conf`);
+- adds a udev rule (`/etc/udev/rules.d/70-valve-leds-user.rules`) that gives
+  your user the LED files, so Steam, which runs as you, can drive the bar;
+- installs and enables `steamos-manager`, the service Steam in gaming mode
+  uses for hardware settings (fan, HDMI-CEC, performance); it recognises the
+  Steam Machine from its DMI data.
 
-The LEDs appear as `/sys/class/leds/valve-leds*`. Steam itself only drives
-the bar (e.g. download progress) in real SteamOS Game Mode.
+Turning it off removes all of that again (the AUR helper is kept).
 
-The driver's Makefile builds against the running kernel, so after a kernel
-update, boot the new kernel and re-run the script (or
-`sudo dkms install leds-valve-dkms/0.1 -k "$(uname -r)"`).
+The LEDs appear as `/sys/class/leds/valve-leds*`. The driver's Makefile
+builds against the running kernel, so after a kernel update, boot the new
+kernel and re-apply (`a` in the menu) or run
+`sudo dkms install leds-valve-dkms/0.1 -k "$(uname -r)"`.
 
 Troubleshooting:
 
 ```bash
 dkms status
-ls /sys/class/leds | grep valve
+ls -l /sys/class/leds/valve-leds*/
 sudo dmesg | grep -i valve
 cat /var/lib/dkms/leds-valve-dkms/0.1/build/make.log
+journalctl --user -b | grep -i led
+```
+
+**BIOS updates** are not part of the wizard. Valve ships the Steam Machine
+BIOS as `F7F0108.cab` in its `fremont-hw-support` package for fwupd. To
+install it by hand (keep the machine on mains power and don't interrupt it):
+
+```bash
+sudo dmidecode -s bios-version     # current version
+sudo pacman -S fwupd
+curl -LO https://steamdeck-packages.steamos.cloud/archlinux-mirror/holo-3.9/os/x86_64/fremont-hw-support-20260807.1-1-any.pkg.tar.zst
+mkdir fhw && tar -I zstd -xf fremont-hw-support-*.pkg.tar.zst -C fhw
+sudo fwupdmgr install fhw/usr/share/fwupd/remotes.d/fremont/firmware/F7F0108.cab
 ```
 
 ### Manual session control
@@ -255,48 +293,25 @@ immediately, which can turn into a loop - hence the Ctrl+Alt+F3 escape above.
 
 ### Removing everything
 
-```bash
-# SDDM: go back to plasma-login-manager
-sudo rm /etc/sddm.conf.d/10-gamescope-autologin.conf
-sudo systemctl disable sddm && sudo systemctl enable plasmalogin
-
-# plasma-login-manager: restore the original login config
-sudo cp /etc/plasmalogin.conf.bak-gamescope-wizard /etc/plasmalogin.conf
-
-# session sync watcher
-sudo systemctl disable --now sync-steamos-session.path
-sudo rm /etc/systemd/system/sync-steamos-session.path
-sudo rm /etc/systemd/system/sync-steamos-session.service
-sudo rm /usr/local/bin/sync-steamos-session.sh
-sudo systemctl daemon-reload
-
-# shortcut and its sudoers rule
-sudo rm /etc/sudoers.d/gamescope-session-switch
-rm ~/Desktop/"Return to Gaming Mode.desktop"
-
-# Steam desktop autostart and environment
-systemctl --user disable --now steam-desktop-autostart.service
-rm ~/.config/systemd/user/steam-desktop-autostart.service
-rm ~/.config/environment.d/99-gamescope-steam-glyphs.conf \
-   ~/.config/environment.d/99-kde-virtual-keyboard.conf
-
-# LED driver (Steam Machine)
-sudo rm /etc/modules-load.d/leds-valve.conf
-sudo pacman -R leds-valve-dkms-git
-```
+Run the wizard and untick everything. Afterwards the PC boots to the normal
+CachyOS login screen again; packages installed for the conversion (Steam,
+gamescope-session, ...) stay installed.
 
 ### Project layout
 
 | File | Responsibility |
 |---|---|
-| `setup-gamescope-boot.sh` | Entry point: user and sudo checks, step order, summary, reboot |
-| `lib/common.sh` | Output helpers, yes/no prompts, backups |
+| `setup-gamescope-boot.sh` | Entry point: checks, menu, apply, summary, restart |
+| `lib/menu.sh` | The menu: detect, toggle, plan and apply changes |
+| `lib/state.sh` | Undo journal for KDE settings (`kset`/`krevert`) |
+| `lib/common.sh` | Output helpers, prompts, backups, plasmashell handling |
 | `lib/packages.sh` | Required packages, AUR helper (yay/paru) |
-| `lib/login-manager.sh` | SDDM or plasmalogin choice and autologin, session sync bridge |
-| `lib/steam-desktop.sh` | Steam in the Plasma session: gamepad UI flags, virtual keyboard, autostart |
-| `lib/led-driver.sh` | Fremont detection, kernel headers, LED driver, OpenRGB |
-| `lib/vapor-theme.sh` | Vapor theme, Valve's SteamOS defaults, panel, dark mode |
+| `lib/login-manager.sh` | SteamOS conversion: SDDM or plasmalogin autologin, sync bridge |
+| `lib/steam-desktop.sh` | Steam in the Plasma session; Steam Deck/Machine icons |
 | `lib/desktop-shortcut.sh` | Return to Gaming Mode shortcut and its sudoers rule |
+| `lib/vapor-theme.sh` | SteamOS theme: Vapor, Valve's defaults, panel, dark mode |
+| `lib/single-user.sh` | Single user mode: no lock screen, user switching or log out |
+| `lib/steam-machine.sh` | Steam Machine support: LED driver, LED access, steamos-manager |
 
 Notes for contributors and AI coding agents are in [`AGENTS.md`](AGENTS.md).
 

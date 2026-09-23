@@ -68,3 +68,10 @@ EOF
 
     ok "Desktop shortcut created successfully."
 }
+
+remove_desktop_shortcut() {
+    local desktop_dir
+    desktop_dir="$(xdg-user-dir DESKTOP 2>/dev/null || echo "$HOME/Desktop")"
+    rm -f "$desktop_dir/Return to Gaming Mode.desktop"
+    sudo rm -f /etc/sudoers.d/gamescope-session-switch
+}
