@@ -59,12 +59,71 @@ show_menu() {
 }
 
 run_menu() {
-    # Sets REAPPLY. Returns 1 if the user quit.
+    # Sets REAPPLY. Returns 1 if the user quit. A checkbox list on a
+    # terminal; a plain numbered prompt when input is piped (scripted runs).
     REAPPLY=false
+    if [[ -t 0 && -t 1 ]]; then
+        run_menu_tui
+    else
+        run_menu_lines
+    fi
+}
+
+draw_menu_tui() {
+    local cursor="$1" i=0 c box state line
+    printf '\033[H\033[2J'
+    echo -e "${c_bold}CachyOS Steam Deck-style Gamescope Boot Wizard${c_reset}"
+    echo "Pick what you want. Anything you untick is put back the way it was."
+    echo
+    MENU_ITEMS=()
+    for c in "${COMPONENTS[@]}"; do
+        component_available "$c" || continue
+        MENU_ITEMS[$i]=$c
+        box="[ ]"; [[ "${WANTED[$c]}" == 1 ]] && box="[${c_green}x${c_reset}]"
+        state="off"; [[ "${CURRENT[$c]}" == 1 ]] && state="${c_green}on${c_reset}"
+        line="$box ${LABEL[$c]}"
+        if (( i == cursor )); then
+            echo -e " ${c_cyan}>${c_reset} ${c_bold}${line}${c_reset}  (now: ${state})"
+        else
+            echo -e "   ${line}  (now: ${state})"
+        fi
+        i=$((i + 1))
+    done
+    echo
+    echo -e "  ${c_bold}Up/Down${c_reset} move   ${c_bold}Space${c_reset} select   ${c_bold}Enter${c_reset} run   ${c_bold}a${c_reset} run + re-apply what's on   ${c_bold}q${c_reset} quit"
+}
+
+run_menu_tui() {
+    local cursor=0 key rest count
+    tput civis 2>/dev/null
+    trap 'tput cnorm 2>/dev/null' EXIT
+    while true; do
+        draw_menu_tui "$cursor"
+        count=${#MENU_ITEMS[@]}
+        IFS= read -rsn1 key
+        if [[ "$key" == $'\e' ]]; then
+            IFS= read -rsn2 -t 0.05 rest
+            key+="$rest"
+        fi
+        case "$key" in
+            $'\e[A'|k) (( cursor = (cursor + count - 1) % count )) ;;
+            $'\e[B'|j) (( cursor = (cursor + 1) % count )) ;;
+            " ") toggle_component "${MENU_ITEMS[$cursor]}" ;;
+            "") break ;;
+            a|A) REAPPLY=true; break ;;
+            q|Q) tput cnorm 2>/dev/null; echo; return 1 ;;
+        esac
+    done
+    tput cnorm 2>/dev/null
+    echo
+    return 0
+}
+
+run_menu_lines() {
     local reply
     while true; do
         show_menu
-        read -rp "$(echo -e "${c_bold}Type a number to toggle, Enter to continue, a = also re-apply what's on, q = quit:${c_reset} ")" reply
+        read -rp "$(echo -e "${c_bold}Type a number to toggle, Enter to continue, a = also re-apply what's on, q = quit:${c_reset} ")" reply || return 1
         case "$reply" in
             "") return 0 ;;
             a|A) REAPPLY=true; return 0 ;;

@@ -109,7 +109,8 @@ shellcheck -S warning setup-gamescope-boot.sh lib/*.sh   # if available
 Behaviour is verified in a CachyOS QEMU/KVM test VM. The VM scripts and a
 Claude Code skill describing the whole test workflow (snapshots, SSH, running
 the wizard with scripted menu input such as `printf '2\n\ny\nn\n'`, the
-per-component checks, reboot checks, the full test matrix, `--fremont` to
+per-component checks; when stdin is not a terminal the menu falls back to a
+numbered prompt, which is what scripted runs use, reboot checks, the full test matrix, `--fremont` to
 fake Steam Machine hardware) live in
 [cachyos-gamescope-boot-dev-env](https://github.com/theupriser/cachyos-gamescope-boot-dev-env).
 Gamescope itself and the real LED bar can only be verified on hardware.

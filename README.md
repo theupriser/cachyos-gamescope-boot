@@ -43,24 +43,24 @@ cd <this-repo>
 ./setup-gamescope-boot.sh
 ```
 
-Run it as yourself, not as root. You'll see a menu like this:
+Run it as yourself, not as root. You'll see a checklist:
 
 ```
-  #   Now    Want   Component
-  1   off    [x]    SteamOS conversion: boot into gaming mode, Steam on the desktop
-  2   off    [x]    Install SteamOS theme: Vapor look, dark mode, SteamOS taskbar
-  3   off    [x]    Install Steam Deck/Machine icons: Deck button icons in gaming mode
-  4   off    [x]    Single user mode: no password, lock screen or log out (SDDM)
+   [x] SteamOS conversion: boot into gaming mode, Steam on the desktop  (now: off)
+ > [x] Install SteamOS theme: Vapor look, dark mode, SteamOS taskbar  (now: off)
+   [x] Install Steam Deck/Machine icons: Deck button icons in gaming mode  (now: off)
+   [x] Single user mode: no password, lock screen or log out (SDDM)  (now: off)
+
+  Up/Down move   Space select   Enter run   a run + re-apply what's on   q quit
 ```
 
-**Now** shows what's on at the moment, **Want** what you'd like. Type a
-number and press Enter to tick or untick it, then press Enter on an empty
-line to continue. The wizard shows what it will change, asks your password
-once, and at the end offers to restart (needed for changes to how the PC
-starts).
+Move with the **arrow keys**, tick or untick with **Space**, and press
+**Enter** to run. "now:" shows what's on at the moment. The wizard then
+shows what it will change, asks your password once, and at the end offers
+to restart (needed for changes to how the PC starts).
 
 Run it again whenever you like - to change your choices, to turn things off
-again, or after a CachyOS update (type `a` in the menu to re-apply
+again, or after a CachyOS update (press `a` in the menu to re-apply
 everything that's on).
 
 Keep the whole folder: the script needs the files in `lib/` next to it.
