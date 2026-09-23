@@ -11,7 +11,8 @@ script fixes that and sets everything up for you.
 
 ## What you get
 
-- **Boots into gaming mode** automatically, without a login screen.
+- **Boots into gaming mode** automatically - you never see a login screen,
+  just like SteamOS.
 - **Switch to Desktop** from Steam's power menu works, and so does going
   back: use the **Return to Gaming Mode** icon on the desktop, or just log
   out.
@@ -37,8 +38,19 @@ cd <this-repo>
 ```
 
 Run it as yourself, not as root. It asks for your password once, then asks a
-few yes/no questions (whether to install missing packages, the SteamOS look,
-and the LED driver on a Steam Machine). At the end it offers to restart.
+few yes/no questions:
+
+- **Single user, no password, like SteamOS?** Recommended for a console.
+  You never see a login or lock screen, and there's no user switching or
+  logging out - typing a password with a controller is no fun. This
+  switches to SDDM, the login manager SteamOS uses. Say no to keep
+  CachyOS's default login manager and KDE's normal lock screen; gaming mode
+  still starts automatically.
+- whether to install missing packages;
+- the LED driver (Steam Machine only) and the SteamOS look.
+
+At the end it offers to restart. The switch to SDDM takes effect from that
+restart.
 
 Keep the whole folder: the script needs the files in `lib/` next to it.
 
@@ -49,7 +61,7 @@ It's safe to run again later, for example after a CachyOS update.
 - **To the desktop:** in gaming mode, open the Steam menu and choose
   **Power > Switch to Desktop**.
 - **Back to gaming mode:** double-click **Return to Gaming Mode** on the
-  desktop, or log out.
+  desktop (or log out, if you didn't choose single user).
 - After a restart you always start in gaming mode.
 
 Prefer to decide yourself where your PC starts? Run one of these in Konsole:
@@ -65,7 +77,7 @@ steamos-session-select oneshot     # always start in gaming mode (default)
 **Ctrl+Alt+F3**, log in with your username and password, and run:
 
 ```bash
-steamos-session-select plasma && sudo systemctl restart plasmalogin
+sudo /usr/lib/steamos/steam-set-session plasma.desktop && sudo systemctl restart display-manager
 ```
 
 That takes you back to the desktop.
@@ -84,7 +96,34 @@ To remove everything the script set up, see
 
 ## Technical details
 
-### Why this is needed
+### Single user: SDDM, no locking
+
+The wizard's first question. Answering yes switches to **SDDM** and turns
+off everything that asks for a password or another user, per user and
+without touching system files: `action/lock_screen`, `switch_user` and
+`start_new_session` restrictions in `kdeglobals`, no automatic locking
+(`kscreenlockerrc`), Meta+L and Ctrl+Alt+Del unbound, and the launcher shows
+only Sleep / Restart / Shut Down (kickoff `primaryActions=3`), which hides
+the Session dropdown with Log Out. (Restricting `action/logout` would also
+hide Restart and Shut Down.) Answering no restores KDE's defaults and keeps
+the current login manager.
+
+**SDDM** is what SteamOS uses, and CachyOS's
+`steam-set-session` supports it directly: it writes
+`/etc/sddm.conf.d/zz-steamos-autologin.conf`, which SDDM honours. The script
+installs and enables `sddm` (disabling the current display manager, active
+from the next boot), writes `User=`, `Session=` and `Relogin=true` to
+`/etc/sddm.conf.d/10-gamescope-autologin.conf`, and removes any
+`[Autologin]` from `/etc/sddm.conf` (read last, so it would override both).
+No sync bridge or sudoers rule is needed; the shortcut just runs
+`steamos-session-select gamescope`, which logs out, and `Relogin=true`
+logs straight back in to gamescope. Switching an existing
+plasma-login-manager setup to SDDM removes the sync bridge.
+
+Keeping **plasma-login-manager** (CachyOS's default since March 2026) needs
+the workarounds below.
+
+### Why this is needed (plasma-login-manager)
 
 CachyOS's `gamescope-session-cachyos` package ships `steamos-session-select`,
 which is meant to work exactly like it does on real SteamOS. Since the March
@@ -117,15 +156,16 @@ tools write to the conf.d fragment into the base config.
 
 In order:
 
-1. Checks the display manager (warns if it isn't `plasma-login-manager`) and
-   that it runs as the user that should autologin.
+1. Checks that it runs as the user that should autologin, and asks whether
+   to switch to SDDM (see above).
 2. Installs missing packages: `gamescope-session-cachyos`, `steam`,
    `mangohud`, `xterm`, `ttf-liberation`, `wqy-zenhei`, `plasma-keyboard`.
-3. Creates `/etc/plasmalogin.conf.d`, backs up and rewrites the
+3. *SDDM:* installs/enables SDDM and writes its autologin config.
+   *plasma-login-manager:* creates `/etc/plasmalogin.conf.d`, backs up and rewrites the
    `[Autologin]` section of `/etc/plasmalogin.conf`, and removes stray
    `zzz-steamos-autologin*.conf` files from manual troubleshooting (never
    `zz-steamos-autologin.conf`, which CachyOS's tools own).
-4. Installs `/usr/local/bin/sync-steamos-session.sh` plus
+4. *plasma-login-manager only:* installs `/usr/local/bin/sync-steamos-session.sh` plus
    `sync-steamos-session.path`/`.service`, which keep the base config in sync
    with session switches.
 5. Sets up Steam for the desktop: `STEAM_GAMEPADUI_ARGS="-gamepadui -steamos3"`
@@ -134,9 +174,9 @@ In order:
    that starts Steam silently in Plasma only.
 6. *(Steam Machine, optional)* the LED driver - see below.
 7. *(Optional)* the SteamOS desktop look - see below.
-8. Creates the **Return to Gaming Mode** shortcut, with a narrow sudoers rule
-   (`/etc/sudoers.d/gamescope-session-switch`) so it can restart the login
-   manager without a password prompt.
+8. Creates the **Return to Gaming Mode** shortcut. On plasma-login-manager it
+   also adds a narrow sudoers rule (`/etc/sudoers.d/gamescope-session-switch`)
+   so it can restart the login manager without a password prompt.
 
 Re-running doesn't duplicate any settings. Every system file it modifies is
 backed up once, next to the original, with a `.bak-gamescope-wizard` suffix.
@@ -216,7 +256,11 @@ immediately, which can turn into a loop - hence the Ctrl+Alt+F3 escape above.
 ### Removing everything
 
 ```bash
-# restore the original login config
+# SDDM: go back to plasma-login-manager
+sudo rm /etc/sddm.conf.d/10-gamescope-autologin.conf
+sudo systemctl disable sddm && sudo systemctl enable plasmalogin
+
+# plasma-login-manager: restore the original login config
 sudo cp /etc/plasmalogin.conf.bak-gamescope-wizard /etc/plasmalogin.conf
 
 # session sync watcher
@@ -248,7 +292,7 @@ sudo pacman -R leds-valve-dkms-git
 | `setup-gamescope-boot.sh` | Entry point: user and sudo checks, step order, summary, reboot |
 | `lib/common.sh` | Output helpers, yes/no prompts, backups |
 | `lib/packages.sh` | Required packages, AUR helper (yay/paru) |
-| `lib/login-manager.sh` | plasmalogin autologin, session sync bridge and its systemd units |
+| `lib/login-manager.sh` | SDDM or plasmalogin choice and autologin, session sync bridge |
 | `lib/steam-desktop.sh` | Steam in the Plasma session: gamepad UI flags, virtual keyboard, autostart |
 | `lib/led-driver.sh` | Fremont detection, kernel headers, LED driver, OpenRGB |
 | `lib/vapor-theme.sh` | Vapor theme, Valve's SteamOS defaults, panel, dark mode |
@@ -263,9 +307,7 @@ Notes for contributors and AI coding agents are in [`AGENTS.md`](AGENTS.md).
   become unnecessary - please open an issue or PR if you notice that.
 - Tested on a Valve Steam Machine running CachyOS Desktop edition. It should
   work on any CachyOS desktop install using `plasma-login-manager`, but
-  hasn't been tested on Steam Deck/Legion Go hardware, which typically use
-  SDDM. With another display manager the script warns and asks before
-  continuing.
+  hasn't been tested on Steam Deck/Legion Go hardware.
 
 ### Related upstream reports
 

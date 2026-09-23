@@ -41,6 +41,19 @@ gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
 
 ## Non-obvious behaviour to preserve
 
+- One wizard question in `choose_setup_mode` sets `$SINGLE_USER` and
+  `$LOGIN_MANAGER`. "Single user, no password" = SteamOS: SDDM plus no lock
+  screen, user switching or log out (`setup_single_user`; the launcher's
+  Session dropdown is hidden via kickoff `primaryActions=3` because
+  restricting `action/logout` also hides Restart/Shut Down). Otherwise the
+  current login manager stays. Two login-manager paths:
+  **sddm** (like SteamOS: `steam-set-session` writes
+  `/etc/sddm.conf.d/zz-steamos-autologin.conf`, which SDDM honours; we add
+  `User=`/`Relogin=` in `10-gamescope-autologin.conf`, and `/etc/sddm.conf`
+  must not contain `[Autologin]` since it's read last) and **plasmalogin**
+  (needs the sync bridge and the shortcut's sudoers rule). Both must keep
+  working.
+
 - `steam-set-session` only writes `/etc/plasmalogin.conf.d/zz-steamos-autologin.conf`;
   the base `/etc/plasmalogin.conf` wins, hence the sync bridge. The sync
   service needs `StartLimitIntervalSec=0`, or bursts of session switches
@@ -83,7 +96,8 @@ Behaviour is best verified in a CachyOS VM (QEMU/KVM, KDE Plasma install,
 runs. Notes from doing this:
 
 - Run the script non-interactively by piping answers, e.g.
-  `printf "\ny\nn\n" | ./setup-gamescope-boot.sh` (user, theme, reboot).
+  `printf "\ny\nn\nn\n" | ./setup-gamescope-boot.sh` (user, single user,
+  theme, reboot).
   The prompt order depends on what's already installed.
 - Over SSH, export the session environment before running it so the live
   Plasma steps work:
