@@ -60,13 +60,8 @@ install_required_packages() {
     mapfile -t MISSING < <(pacman -T gamescope-session-cachyos steam mangohud xterm ttf-liberation wqy-zenhei plasma-keyboard)
 
     if [[ ${#MISSING[@]} -gt 0 ]]; then
-        info "Missing packages: ${MISSING[*]}"
-        if ask_yn "Install them now?"; then
-            sudo pacman -S --needed --noconfirm "${MISSING[@]}" || { err "Package installation failed."; exit 1; }
-        else
-            err "Cannot continue without these packages."
-            exit 1
-        fi
+        info "Installing missing packages: ${MISSING[*]}"
+        sudo pacman -S --needed --noconfirm "${MISSING[@]}" || { err "Package installation failed."; return 1; }
     else
         ok "All required packages already installed."
     fi

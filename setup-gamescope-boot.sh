@@ -2,46 +2,21 @@
 #
 # setup-gamescope-boot.sh
 #
-# Wizard to configure a CachyOS (KDE Plasma + plasma-login-manager) install
-# to always boot into a Steam Deck-style gamescope session, with the
-# ability to switch to Plasma desktop and back, Deck-style, and have it
-# reset to gamescope on the next boot/logout.
+# Wizard that makes a CachyOS (KDE Plasma) install behave like SteamOS:
+# boot into a Steam Deck-style gamescope session, switch to the Plasma
+# desktop and back, and reset to gamescope on the next boot/logout.
 #
-# Covers three real bugs found on CachyOS as of Sep 2026:
-#   1. steam-set-session never writes User= to plasmalogin's autologin
-#      config, so plasma-login-manager never actually autologs in.
-#   2. steam-set-session fails outright if /etc/plasmalogin.conf.d is
-#      missing, breaking "Switch to Desktop" from inside gamescope.
-#   3. /etc/plasmalogin.conf (the base config) hardcodes Session=plasma
-#      and takes priority over anything written to
-#      /etc/plasmalogin.conf.d/*.conf, so session switches never stick
-#      without a bridge that copies the conf.d value back into the base
-#      file, plus Relogin=true so ending a session re-triggers autologin
-#      instead of dropping to the greeter.
-#
-# Safe to re-run: it is idempotent and backs up files before editing.
-#
-# Automatically configures a permanent background systemd autostart for Steam
-# and Wayland overrides so the Steam Controller virtual keyboard (Steam+X)
-# always works in desktop mode.
-#
-# Optionally also offers to install the official Valve "Vapor" KDE Plasma
-# theme (colors, icons, wallpapers, Plasma look-and-feel package) used on
-# real SteamOS, pulled directly from Valve's own package mirror, so the
-# desktop side matches the gamescope side visually.
-#
-# On Valve Fremont hardware (DMI sys_vendor=Valve, product_name=Fremont --
-# i.e. the Steam Machine), also offers to install the
-# leds-valve DKMS driver from the AUR so the front LED bar is exposed under
-# /sys/class/leds instead of sitting dark or "breathing" under a standard
-# desktop kernel, plus the option to pull in an experimental OpenRGB build
-# that has native support for driving it.
+# It opens with a menu that detects which components are on and turns
+# them on or off to match what the user picks; turning one off restores
+# what was there before (system files from .bak-gamescope-wizard backups,
+# KDE settings from the undo journal in lib/state.sh). Components live in
+# lib/, see README.md. Safe to re-run.
 
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-for lib in common packages login-manager steam-desktop led-driver vapor-theme desktop-shortcut; do
+for lib in common state packages login-manager single-user steam-desktop steam-machine vapor-theme desktop-shortcut menu; do
     # shellcheck source=/dev/null
     source "$SCRIPT_DIR/lib/$lib.sh"
 done
@@ -49,92 +24,59 @@ done
 require_root_helper
 
 echo -e "${c_bold}CachyOS Steam Deck-style Gamescope Boot Wizard${c_reset}"
-echo "This sets your machine up to always boot into gamescope (like SteamOS),"
-echo "with working Switch-to-Desktop and switch-back, surviving reboots."
-echo
+echo "Turn the SteamOS-style parts on or off. The menu shows what is on now;"
+echo "anything you turn off is put back the way it was."
 
 if ! command -v pacman >/dev/null 2>&1; then
     err "This doesn't look like an Arch/CachyOS system (no pacman found). Aborting."
     exit 1
 fi
 
-# Ask for the sudo password once up front and keep it fresh, instead of
-# prompting at random points during the run.
+# Everything per-user (autologin user, Steam, theme, shortcut) is for the
+# user running the script.
+TARGET_USER="$(id -un)"
+
+detect_components
+run_menu || { info "Nothing changed."; exit 0; }
+plan_changes
+
+if [[ ${#TO_DISABLE[@]} -eq 0 && ${#TO_ENABLE[@]} -eq 0 ]]; then
+    ok "Everything is already the way you want it."
+    exit 0
+fi
+
+echo
+echo -e "${c_bold}This will:${c_reset}"
+for c in "${TO_DISABLE[@]}"; do echo "  - turn off: ${LABEL[$c]}"; done
+for c in "${TO_ENABLE[@]}"; do
+    if [[ "${CURRENT[$c]}" == 1 ]]; then echo "  - re-apply: ${LABEL[$c]}"; else echo "  - turn on:  ${LABEL[$c]}"; fi
+done
+ask_yn "Go ahead?" y || { info "Nothing changed."; exit 0; }
+
+# Ask for the sudo password once and keep it fresh, instead of prompting at
+# random points during the run.
 sudo -n true 2>/dev/null || sudo -v || exit 1
 while true; do sudo -n true; sleep 50; kill -0 "$$" 2>/dev/null || exit; done 2>/dev/null &
 
-TARGET_USER="${SUDO_USER:-$USER}"
-read -rp "$(echo -e "${c_bold}Which user should autologin into gamescope?${c_reset} [${TARGET_USER}] ")" input_user
-TARGET_USER="${input_user:-$TARGET_USER}"
+apply_changes
 
-if ! id "$TARGET_USER" >/dev/null 2>&1; then
-    err "User '$TARGET_USER' does not exist on this system."
-    exit 1
+echo
+detect_components
+echo -e "${c_bold}Done. Current state:${c_reset}"
+for c in "${COMPONENTS[@]}"; do
+    component_available "$c" || continue
+    if [[ "${CURRENT[$c]}" == 1 ]]; then echo -e "  ${c_green}on ${c_reset} ${LABEL[$c]}"; else echo "  off  ${LABEL[$c]}"; fi
+done
+if [[ ${#FAILED[@]} -gt 0 ]]; then
+    warn "These had problems (see above): ${FAILED[*]}"
 fi
-if [[ "$TARGET_USER" != "$(id -un)" ]]; then
-    # Environment, systemd user units, theme and shortcut are all written
-    # into the invoking user's home and user session.
-    err "Run this script as '$TARGET_USER' itself so per-user settings land in the right home."
-    exit 1
-fi
-ok "Using user: $TARGET_USER"
 echo
 
-choose_setup_mode
-echo
-
-install_required_packages
-echo
-
-setup_login_manager
-
-setup_steam_desktop
-echo
-
-setup_single_user
-echo
-
-setup_led_driver
-
-setup_vapor_theme
-echo
-
-create_desktop_shortcut
-echo
-
-# ---------- 11. Summary + reboot ----------
-
-echo -e "${c_bold}Setup complete.${c_reset}"
-echo "What this did:"
-echo "  - Installed gamescope-session-cachyos, steam, mangohud and friends (if missing)"
-if [[ "$LOGIN_MANAGER" == "sddm" ]]; then
-    echo "  - Made SDDM the login manager, autologging '$TARGET_USER' into gamescope"
-    echo "    with Relogin=true, like SteamOS (active from the next boot)"
-else
-    echo "  - Created /etc/plasmalogin.conf.d (fixes Switch-to-Desktop crash)"
-    echo "  - Set $BASE_CONF to autologin '$TARGET_USER' into gamescope, with Relogin=true"
-    echo "  - Installed a sync bridge + systemd watcher so Steam's Switch-to-Desktop"
-    echo "    (and cachyos-gamescope-autologin.service resetting back to gamescope"
-    echo "    on logout) both actually take effect"
-    echo "  - Added /etc/sudoers.d/gamescope-session-switch so the desktop shortcut works"
-fi
-echo "  - Configured permanent silent Steam autostart so Steam+X works everywhere"
-echo "  - Injected -steamos3 flag to force original Steam Deck overlay glyphs"
-echo "  - Optionally installed Valve's Vapor (Steam Deck) KDE theme, if you chose to"
-echo "  - On Valve Fremont hardware, optionally set up the leds-valve front LED bar driver"
-echo
-echo "Backups of any files this script modified were saved with a"
-echo ".bak-gamescope-wizard suffix next to the original."
-echo
-echo "To manually flip sessions any time:"
-echo "  steamos-session-select gamescope   # boot straight into gamescope now"
-echo "  steamos-session-select plasma      # boot straight into desktop now"
-echo "  steamos-session-select persistent  # remember last-used session across reboots"
-echo "  steamos-session-select oneshot     # always start in gamescope regardless (default Deck behavior)"
-echo
-
-if ask_yn "Reboot now to test it?" n; then
-    sudo reboot
-else
-    info "Skipping reboot. Run 'sudo reboot' whenever you're ready to test."
+# Login manager changes only take effect after a restart.
+if [[ " ${TO_DISABLE[*]} ${TO_ENABLE[*]} " == *" gaming "* || " ${TO_DISABLE[*]} ${TO_ENABLE[*]} " == *" single "* ]]; then
+    if ask_yn "Restart now so the changes take effect?" n; then
+        sudo reboot
+    else
+        info "Restart whenever you're ready."
+    fi
 fi

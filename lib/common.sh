@@ -45,3 +45,25 @@ backup_file() {
         info "Backed up $f -> ${f}.bak-gamescope-wizard"
     fi
 }
+
+# plasmashell keeps its config in memory and writes it back on exit, so
+# edits to its files (panels, applets, wallpaper) must be made while it is
+# stopped. It is restarted through systemd so it keeps the session's
+# environment (platform theme etc.); a plain --replace from this shell
+# may not, which gives a light-themed desktop.
+stop_plasmashell_for_edit() {
+    PLASMASHELL_WAS_RUNNING=false
+    if pgrep -u "$USER" -x plasmashell >/dev/null; then
+        PLASMASHELL_WAS_RUNNING=true
+        systemctl --user stop plasma-plasmashell.service 2>/dev/null
+        pkill -u "$USER" -x plasmashell && sleep 2
+    fi
+}
+
+restart_plasmashell_if_stopped() {
+    if [[ "${PLASMASHELL_WAS_RUNNING:-false}" == true ]]; then
+        rm -rf ~/.cache/plasmashell* ~/.cache/org.kde.dirmodel-qml.kcache
+        systemctl --user start plasma-plasmashell.service 2>/dev/null ||
+            { setsid plasmashell >/dev/null 2>&1 & }
+    fi
+}

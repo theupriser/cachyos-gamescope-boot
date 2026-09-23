@@ -1,58 +1,86 @@
 #!/bin/bash
-# plasma-login-manager autologin into gamescope, and the session sync bridge.
+# Booting into gaming mode: autologin into gamescope with SDDM or
+# plasma-login-manager (plus the session sync bridge the latter needs).
 # Sourced by setup-gamescope-boot.sh; not meant to be run on its own.
 
 BASE_CONF="/etc/plasmalogin.conf"
 
-choose_setup_mode() {
-    # Step 1: one question decides both the login manager and locking.
-    # "Single user, no password" is SteamOS: SDDM (which CachyOS's session
-    # tools support directly, no workarounds) plus no lock screen, user
-    # switching or log out. Otherwise keep the current login manager
-    # (CachyOS's default plasma-login-manager gets the sync bridge below)
-    # and KDE's normal locking. Sets SINGLE_USER and LOGIN_MANAGER.
-    local current
-    current="$(systemctl show -p Id --value display-manager 2>/dev/null | sed 's/\.service$//')"
-    info "Detected display manager: ${current:-none}"
-
-    echo "SteamOS is a single-user console without passwords: no login screen, no"
-    echo "lock screen, no user switching or logging out - typing a password with a"
-    echo "controller is no fun. It uses the SDDM login manager for that."
-    if ask_yn "Single user, no password, like SteamOS? (switches to SDDM)" y; then
-        SINGLE_USER=true
-        LOGIN_MANAGER="sddm"
-        return
-    fi
-
-    SINGLE_USER=false
-    if [[ "$current" == "sddm" ]]; then
-        LOGIN_MANAGER="sddm"
-        return
-    fi
-    LOGIN_MANAGER="plasmalogin"
-    if [[ "$current" != "plasmalogin" ]]; then
-        warn "The workarounds are built for plasma-login-manager, but '${current:-unknown}' is active."
-        ask_yn "Continue anyway?" n || exit 0
-    fi
+# The "SteamOS conversion" menu item: gaming mode boot, the Return to
+# Gaming Mode shortcut and Steam on the desktop (lib/steam-desktop.sh).
+gaming_status() {
+    # Autologin into gamescope is configured for this user.
+    case "$(current_display_manager)" in
+        sddm) [[ -f /etc/sddm.conf.d/10-gamescope-autologin.conf ]] ;;
+        plasmalogin)
+            sed -n '/^\[Autologin\]/,/^\[/p' "$BASE_CONF" 2>/dev/null | grep -qx "User=$USER" &&
+                [[ -f /etc/systemd/system/sync-steamos-session.path ]] ;;
+        *) return 1 ;;
+    esac
 }
 
-setup_login_manager() {
-    # Steps 3-8 for whichever login manager was chosen in step 1.
+gaming_enable() {
+    # LOGIN_MANAGER (sddm with single user, else plasmalogin) is set by the
+    # menu. Re-running with the other value switches over cleanly.
+    install_required_packages || return 1
     case "$LOGIN_MANAGER" in
         sddm)
-            switch_to_sddm || exit 1
+            switch_to_sddm || return 1
             configure_sddm_autologin
             remove_session_sync
             ;;
         plasmalogin)
+            remove_sddm_autologin
+            switch_to_plasmalogin || return 1
             configure_autologin
             install_session_sync
             ;;
     esac
+    create_desktop_shortcut
+    steam_enable
+}
+
+gaming_disable() {
+    # Back to a normal desktop boot with CachyOS's default login manager.
+    # Packages (steam, gamescope-session-cachyos, ...) are kept.
+    info "Turning off booting into gaming mode..."
+    remove_sddm_autologin
+    remove_session_sync
+    restore_plasmalogin_config
+    switch_to_plasmalogin
+    remove_desktop_shortcut
+    steam_disable
+    ok "The PC boots to the normal login screen again (from the next boot)."
+}
+
+switch_to_plasmalogin() {
+    [[ "$(current_display_manager)" == plasmalogin ]] && return 0
+    info "Switching the login manager to plasma-login-manager..."
+    sudo pacman -S --needed --noconfirm plasma-login-manager || { err "Installing plasma-login-manager failed."; return 1; }
+    local current
+    current="$(systemctl show -p Id --value display-manager 2>/dev/null)"
+    [[ -n "$current" && "$current" != plasmalogin.service ]] && sudo systemctl disable "$current"
+    sudo systemctl enable -f plasmalogin.service || { err "Enabling plasmalogin failed."; return 1; }
+    ok "plasma-login-manager is the login manager from the next boot on."
+}
+
+remove_sddm_autologin() {
+    sudo rm -f /etc/sddm.conf.d/10-gamescope-autologin.conf
+}
+
+restore_plasmalogin_config() {
+    # Put back the original /etc/plasmalogin.conf from the first run's
+    # backup, or at least drop our [Autologin] section.
+    if [[ -f "${BASE_CONF}.bak-gamescope-wizard" ]]; then
+        sudo cp -a "${BASE_CONF}.bak-gamescope-wizard" "$BASE_CONF"
+    elif [[ -f "$BASE_CONF" ]]; then
+        sudo awk '/^\[Autologin\]/ { skip=1; next } /^\[/ { skip=0 } !skip { print }' "$BASE_CONF" |
+            sudo tee "${BASE_CONF}.tmp" > /dev/null && sudo mv "${BASE_CONF}.tmp" "$BASE_CONF"
+    fi
 }
 
 switch_to_sddm() {
     # Takes effect at the next boot; the running session is left alone.
+    [[ "$(current_display_manager)" == sddm ]] && return 0
     info "Installing and enabling SDDM..."
     sudo pacman -S --needed --noconfirm sddm || { err "Installing sddm failed."; return 1; }
     local current
@@ -62,7 +90,6 @@ switch_to_sddm() {
     fi
     sudo systemctl enable -f sddm.service || { err "Enabling sddm failed."; return 1; }
     ok "SDDM is the login manager from the next boot on."
-    echo
 }
 
 configure_sddm_autologin() {

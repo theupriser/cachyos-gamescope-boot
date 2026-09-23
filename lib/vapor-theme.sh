@@ -4,22 +4,22 @@
 
 merge_kde_config() {
     # Merge a KDE-style ini file (e.g. one of Valve's /etc/xdg defaults) into
-    # the user's own config with kwriteconfig6, so SteamOS defaults win over
+    # the user's own config (journaled, see lib/state.sh), so SteamOS defaults win over
     # the distro's without touching package-owned files in /etc/xdg.
     # Nested groups ("[A][B]") are supported; immutable "[$i]" groups and
     # comments are skipped.
     local src="$1" target="$2" line key value
-    local -a groups=()
+    local groups=""
     local skip=0
     while IFS= read -r line || [[ -n "$line" ]]; do
         line="${line%$'\r'}"
         [[ -z "$line" || "$line" == \#* ]] && continue
         if [[ "$line" == \[* ]]; then
-            skip=0; groups=()
+            skip=0; groups=""
             [[ "$line" == *'[$'* ]] && { skip=1; continue; }
             local rest="$line"
             while [[ "$rest" =~ ^\[([^]]*)\](.*)$ ]]; do
-                groups+=("--group" "${BASH_REMATCH[1]}")
+                groups+="${groups:+|}${BASH_REMATCH[1]}"
                 rest="${BASH_REMATCH[2]}"
             done
             continue
@@ -27,7 +27,7 @@ merge_kde_config() {
         (( skip )) && continue
         [[ "$line" == *=* ]] || continue
         key="${line%%=*}"; value="${line#*=}"
-        kwriteconfig6 --file "$target" "${groups[@]}" --key "$key" "$value"
+        kset theme "$target" "$groups" "$key" "$value"
     done < "$src"
 }
 
@@ -113,15 +113,19 @@ install_vapor_theme() {
         [[ -f "${tmp_dir}/etc/xdg/$f" ]] && merge_kde_config "${tmp_dir}/etc/xdg/$f" "$f"
     done
     [[ -f "${tmp_dir}/etc/xdg/kded5rc" ]] && merge_kde_config "${tmp_dir}/etc/xdg/kded5rc" kded6rc
-    kwriteconfig6 --file konsolerc --group "Desktop Entry" --key DefaultProfile Vapor.profile
+    kset theme konsolerc "Desktop Entry" DefaultProfile Vapor.profile
     mkdir -p ~/.config/gtk-3.0 ~/.config/gtk-4.0
-    kwriteconfig6 --file ~/.config/gtk-3.0/settings.ini --group Settings --key gtk-theme-name Vapor
-    kwriteconfig6 --file ~/.config/gtk-4.0/settings.ini --group Settings --key gtk-theme-name Vapor
+    kset theme ~/.config/gtk-3.0/settings.ini Settings gtk-theme-name Vapor
+    kset theme ~/.config/gtk-4.0/settings.ini Settings gtk-theme-name Vapor
     # Vapor is a dark theme: tell GTK, libadwaita and portal-aware apps
     # (Firefox, Steam's web views, Flatpaks) to use their dark variants too.
-    kwriteconfig6 --file ~/.config/gtk-3.0/settings.ini --group Settings --key gtk-application-prefer-dark-theme true
-    kwriteconfig6 --file ~/.config/gtk-4.0/settings.ini --group Settings --key gtk-application-prefer-dark-theme true
+    kset theme ~/.config/gtk-3.0/settings.ini Settings gtk-application-prefer-dark-theme true
+    kset theme ~/.config/gtk-4.0/settings.ini Settings gtk-application-prefer-dark-theme true
     if command -v gsettings >/dev/null 2>&1; then
+        [[ -n "$(state_get theme gsettings_scheme)" ]] ||
+            state_set theme gsettings_scheme "$(gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null)"
+        [[ -n "$(state_get theme gsettings_gtk)" ]] ||
+            state_set theme gsettings_gtk "$(gsettings get org.gnome.desktop.interface gtk-theme 2>/dev/null)"
         gsettings set org.gnome.desktop.interface color-scheme prefer-dark 2>/dev/null || true
         gsettings set org.gnome.desktop.interface gtk-theme Vapor 2>/dev/null || true
     fi
@@ -130,138 +134,52 @@ install_vapor_theme() {
     info "Cleaning up temporary files..."
     rm -rf "$tmp_dir"
 
-    # Launcher icon
+    # Remember what to go back to when the theme is turned off again.
+    [[ -n "$(state_get theme lookandfeel)" ]] ||
+        state_set theme lookandfeel "$(kreadconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage \
+            --default "$(kreadconfig6 --file /etc/xdg/kdeglobals --group KDE --key LookAndFeelPackage --default org.kde.breeze.desktop)")"
+    [[ -n "$(state_get theme colorscheme)" ]] ||
+        state_set theme colorscheme "$(kreadconfig6 --file kdeglobals --group General --key ColorScheme --default BreezeLight)"
+
+    local appletsrc="plasma-org.kde.plasma.desktop-appletsrc" applet
+
     # Same launcher icon SteamOS sets (Vapor Deck plasmoid setup script).
-    local icon_name="distributor-logo-steamdeck"
-    local conf_file="$HOME/.config/plasma-org.kde.plasma.desktop-appletsrc"
+    for applet in $(plasma_applets org.kde.plasma.kickoff); do
+        kset theme "$appletsrc" "Containments|${applet%%:*}|Applets|${applet#*:}|Configuration|General" icon distributor-logo-steamdeck
+    done
+    # SteamOS scales tray icons to the panel height. Valve's setup script
+    # targets Plasma 5's separate tray containment; in Plasma 6 the setting
+    # lives on the systemtray applet itself.
+    for applet in $(plasma_applets org.kde.plasma.systemtray); do
+        kset theme "$appletsrc" "Containments|${applet%%:*}|Applets|${applet#*:}|General" scaleIconsToFit true
+    done
+    # SteamOS shows the date below the time.
+    for applet in $(plasma_applets org.kde.plasma.digitalclock); do
+        kset theme "$appletsrc" "Containments|${applet%%:*}|Applets|${applet#*:}|Configuration|Appearance" dateDisplayFormat BelowTime
+    done
 
-    if ! find ~/.local/share/icons /usr/share/icons -iname "${icon_name}.*" 2>/dev/null | grep -q .; then
-        warn "Could not find '${icon_name}' installed anywhere under ~/.local/share/icons or /usr/share/icons."
-        warn "The launcher icon will be set anyway, but it may show as a broken icon until the file is installed."
-    fi
-
-    if [[ -f "$conf_file" ]]; then
-        info "Looking for the Application Launcher applet (Kickoff/Kicker) to set the custom icon..."
-        local matches=()
-        local current_section=""
-        local current_containment=""
-        local current_applet=""
-
-        while IFS= read -r line; do
-            if [[ "$line" =~ ^\[Containments\]\[([0-9]+)\]\[Applets\]\[([0-9]+)\]$ ]]; then
-                current_containment="${BASH_REMATCH[1]}"
-                current_applet="${BASH_REMATCH[2]}"
-                current_section="applet_root"
-                continue
-            fi
-            if [[ "$line" =~ ^\[ ]]; then
-                current_section=""
-                continue
-            fi
-            if [[ "$current_section" == "applet_root" && "$line" =~ ^plugin=(org\.kde\.plasma\.(kickoff|kicker|simplemenu|homerun|application-menu))$ ]]; then
-                matches+=( "${current_containment}:${current_applet}:${BASH_REMATCH[1]}" )
-                current_section=""
-            fi
-        done < "$conf_file"
-
-        if [[ ${#matches[@]} -gt 0 ]]; then
-            for m in "${matches[@]}"; do
-                IFS=':' read -r containment applet plugin <<< "$m"
-                info "Setting launcher icon on Containment $containment / Applet $applet ($plugin)..."
-                kwriteconfig6 \
-                    --file "$conf_file" \
-                    --group Containments --group "$containment" \
-                    --group Applets --group "$applet" \
-                    --group Configuration --group General \
-                    --key icon "$icon_name"
-                ok "Icon set to '$icon_name'."
-            done
-        else
-            warn "No compatible Application Launcher applet found in panel config. Skipping icon assignment."
-        fi
-    else
-        warn "$conf_file not found. Skipping menu icon configuration."
-    fi
-
-    # SteamOS scales system tray icons to the panel height. Valve's setup
-    # script targets Plasma 5's separate tray containment; in Plasma 6 the
-    # setting lives on the systemtray applet itself.
-    if [[ -f "$conf_file" ]]; then
-        local tray
-        for tray in $(awk '
-            /^\[Containments\]\[[0-9]+\]\[Applets\]\[[0-9]+\]$/ { split($0, p, /[][]+/); sect = p[3] ":" p[5] }
-            /^\[/ && !/\]\[Applets\]\[[0-9]+\]$/ { sect = "" }
-            /^plugin=org\.kde\.plasma\.systemtray$/ && sect != "" { print sect }
-        ' "$conf_file"); do
-            kwriteconfig6 --file "$conf_file" --group Containments --group "${tray%%:*}" \
-                --group Applets --group "${tray#*:}" --group General \
-                --key scaleIconsToFit true
+    # Wallpaper: Valve ships them as flat JPGs in usr/share/wallpapers.
+    local wallpaper="$HOME/.local/share/wallpapers/Steam Deck Logo Default.jpg" containment
+    if [[ -f "$wallpaper" ]]; then
+        for containment in $(grep -oP '^\[Containments\]\[\K[0-9]+(?=\]$)' ~/.config/"$appletsrc" 2>/dev/null); do
+            grep -q "^\[Containments\]\[$containment\]\[Wallpaper\]" ~/.config/"$appletsrc" || continue
+            kset theme "$appletsrc" "Containments|$containment|Wallpaper|org.kde.image|General" Image "file://$wallpaper"
         done
     fi
 
-    # SteamOS shows the date below the time in the panel clock.
-    if [[ -f "$conf_file" ]]; then
-        local clock
-        for clock in $(awk '
-            /^\[Containments\]\[[0-9]+\]\[Applets\]\[[0-9]+\]$/ { split($0, p, /[][]+/); sect = p[3] ":" p[5] }
-            /^\[/ && !/\]\[Applets\]\[[0-9]+\]$/ { sect = "" }
-            /^plugin=org\.kde\.plasma\.digitalclock$/ && sect != "" { print sect }
-        ' "$conf_file"); do
-            kwriteconfig6 --file "$conf_file" --group Containments --group "${clock%%:*}" \
-                --group Applets --group "${clock#*:}" --group Configuration --group Appearance \
-                --key dateDisplayFormat BelowTime
-        done
-    fi
+    # Vapor color scheme and Plasma style; the theme's own defaults use
+    # breeze-dark icons (there is no "Vapor" icon theme).
+    kset theme kdeglobals KDE LookAndFeelPackage com.valve.vapor.desktop
+    kset theme kdeglobals Icons Theme breeze-dark
+    kset theme kdeglobals General ColorScheme Vapor
+    kset theme plasmarc Theme name Vapor
 
-    # Wallpaper
-    # Valve ships the wallpapers as flat JPGs in usr/share/wallpapers.
-    local wallpaper_path="$HOME/.local/share/wallpapers/Steam Deck Logo Default.jpg"
-
-    if [[ -f "$wallpaper_path" ]]; then
-        info "Applying official Steam Deck Vapor wallpaper via D-Bus script..."
-        local dbus_cmd="
-            var allDesktops = desktops();
-            for (var i = 0; i < allDesktops.length; i++) {
-                var d = allDesktops[i];
-                d.currentConfigGroup = ['Wallpaper', 'org.kde.image', 'General'];
-                d.writeConfig('Image', 'file://${wallpaper_path}');
-            }
-        "
-        if ! pgrep -u "$USER" -x plasmashell >/dev/null; then
-            :
-        elif command -v qdbus6 >/dev/null 2>&1; then
-            qdbus6 org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript "$dbus_cmd" >/dev/null 2>&1 || true
-        else
-            qdbus org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript "$dbus_cmd" >/dev/null 2>&1 || true
-        fi
-
-        if [[ -f "$conf_file" ]]; then
-            local desktop_sections=$(grep -E '^\[Containments\]\[[0-9]+\]$' "$conf_file" || true)
-            while read -r section; do
-                if [[ -n "$section" ]]; then
-                    local clean_sec=$(echo "$section" | tr -d '[]')
-                    kwriteconfig6 --file "$conf_file" --group "$clean_sec" --group Wallpaper --group org.kde.image --group General --key Image "file://${wallpaper_path}"
-                fi
-            done <<< "$desktop_sections"
-        fi
-        ok "Wallpaper path pushed to session config."
-    else
-        warn "Could not find extracted Vapor wallpaper file. Skipping."
-    fi
-
-    # Activate the Vapor global theme and color scheme, then restart
-    # plasmashell once so it picks everything up (restarting first races
-    # with the settings being written). The theme's own defaults use
-    # breeze-dark icons; there is no "Vapor" icon theme.
-    kwriteconfig6 --file kdeglobals --group Icons --key Theme "breeze-dark"
-    kwriteconfig6 --file kdeglobals --group General --key ColorScheme "Vapor"
-    kwriteconfig6 --file plasmarc --group Theme --key name "Vapor"
-
-    # Same panel change for the next login, in case Plasma isn't running now.
+    # SteamOS uses a solid, full-width bottom panel at Plasma's stock 44px
+    # height (CachyOS ships a floating 30px one).
     local panel
     for panel in $(grep -oP '^\[PlasmaViews\]\[Panel \K[0-9]+(?=\]$)' ~/.config/plasmashellrc 2>/dev/null); do
-        kwriteconfig6 --file plasmashellrc --group PlasmaViews --group "Panel $panel" --key floating 0
-        kwriteconfig6 --file plasmashellrc --group PlasmaViews --group "Panel $panel" --group Defaults --key thickness 44
+        kset theme plasmashellrc "PlasmaViews|Panel $panel" floating 0
+        kset theme plasmashellrc "PlasmaViews|Panel $panel|Defaults" thickness 44
     done
 
     gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor 2>/dev/null || true
@@ -269,56 +187,83 @@ install_vapor_theme() {
 
     # Live changes need a running Plasma session; otherwise they are picked
     # up from the config files above at the next Plasma login.
-    if pgrep -u "$USER" -x plasmashell >/dev/null; then
+    if [[ "${PLASMASHELL_WAS_RUNNING:-false}" == true ]]; then
         info "Applying the theme to the running Plasma session..."
         lookandfeeltool -a com.valve.vapor.desktop >/dev/null 2>&1 || true
         # lookandfeeltool leaves the distro's color scheme active; apply it explicitly.
         plasma-apply-colorscheme Vapor >/dev/null 2>&1 || true
         qdbus6 org.kde.kded6 /modules/gtkconfig org.kde.gtkconfig.setGtkTheme Vapor >/dev/null 2>&1 || true
-        qdbus6 org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript \
-            'panels().forEach(function (p) {
-                p.widgets("org.kde.plasma.systemtray").forEach(function (w) { w.currentConfigGroup = ["General"]; w.writeConfig("scaleIconsToFit", true); });
-                p.widgets("org.kde.plasma.digitalclock").forEach(function (w) { w.currentConfigGroup = ["Appearance"]; w.writeConfig("dateDisplayFormat", "BelowTime"); });
-            })' \
-            >/dev/null 2>&1 || true
-        # SteamOS uses a solid, full-width bottom panel at Plasma's stock
-        # 44px height (CachyOS ships a floating 30px one).
-        qdbus6 org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript \
-            'panels().forEach(function (p) { p.floating = false; p.lengthMode = "fill"; p.height = 44; })' \
-            >/dev/null 2>&1 || true
-        sleep 2  # let plasmashell flush the scripted changes before replacing it
-        rm -rf ~/.cache/plasmashell* ~/.cache/org.kde.dirmodel-qml.kcache
         qdbus6 org.kde.KWin /KWin org.kde.KWin.reconfigure >/dev/null 2>&1 || true
-        # Restart through systemd so plasmashell keeps the session's environment
-        # (platform theme etc.); a plain --replace from this shell may not.
-        if systemctl --user cat plasma-plasmashell.service >/dev/null 2>&1; then
-            # Also takes over from a stray instance started by an earlier --replace.
-            systemctl --user stop plasma-plasmashell.service
-            pkill -u "$USER" -x plasmashell && sleep 2
-            systemctl --user start plasma-plasmashell.service
-        else
-            setsid plasmashell --replace >/dev/null 2>&1 &
-        fi
     else
         info "No running Plasma session; the theme applies at your next desktop login."
     fi
-
-    ok "Vapor theme assets installed. Apply it under System Settings > Appearance"
-    ok "> Global Theme > Vapor (Steam Deck), next time you're in a Plasma session."
+    ok "SteamOS desktop look installed."
 }
 
-setup_vapor_theme() {
-    # Step 9 (optional): ask, make sure curl/zstd exist, then install.
-    echo
-    if ask_yn "Also install Valve's official Vapor (Steam Deck) KDE theme for your desktop session?" n; then
-        if ! command -v curl >/dev/null 2>&1; then
-            warn "curl not found, installing it first..."
-            sudo pacman -S --needed --noconfirm curl
-        fi
-        if ! command -v unzstd >/dev/null 2>&1; then
-            warn "zstd not found, installing it first..."
-            sudo pacman -S --needed --noconfirm zstd
-        fi
-        install_vapor_theme || warn "Vapor theme install ran into a problem - see errors above. Your gamescope boot setup above is unaffected."
+theme_status() {
+    [[ "$(kreadconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage)" == com.valve.vapor.desktop ]]
+}
+
+theme_enable() {
+    command -v curl >/dev/null 2>&1 || sudo pacman -S --needed --noconfirm curl
+    command -v unzstd >/dev/null 2>&1 || sudo pacman -S --needed --noconfirm zstd
+    # Stop plasmashell first: the panel and wallpaper edits go to files it
+    # would otherwise overwrite with its in-memory config on exit.
+    stop_plasmashell_for_edit
+    install_vapor_theme
+    local rc=$?
+    restart_plasmashell_if_stopped
+    (( rc == 0 )) || warn "Vapor theme install ran into a problem - see errors above."
+    return $rc
+}
+
+theme_disable() {
+    info "Restoring the previous desktop look..."
+    local lookandfeel colorscheme
+    lookandfeel="$(state_get theme lookandfeel org.kde.breeze.desktop)"
+    colorscheme="$(state_get theme colorscheme BreezeLight)"
+
+    stop_plasmashell_for_edit
+    if has_journal theme; then
+        krevert theme
+    else
+        # Installed by a version of this script without the undo journal:
+        # undo the main settings it made.
+        kwriteconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage --delete
+        kwriteconfig6 --file kdeglobals --group General --key ColorScheme --delete
+        kwriteconfig6 --file kdeglobals --group Icons --key Theme --delete
+        kwriteconfig6 --file plasmarc --group Theme --key name --delete
+        local f
+        for f in ~/.config/gtk-3.0/settings.ini ~/.config/gtk-4.0/settings.ini; do
+            [[ -f "$f" ]] || continue
+            kwriteconfig6 --file "$f" --group Settings --key gtk-theme-name --delete
+            kwriteconfig6 --file "$f" --group Settings --key gtk-application-prefer-dark-theme --delete
+        done
+        kwriteconfig6 --file konsolerc --group "Desktop Entry" --key DefaultProfile --delete
     fi
+    if command -v gsettings >/dev/null 2>&1; then
+        local v
+        v="$(state_get theme gsettings_scheme)"
+        if [[ -n "$v" ]]; then gsettings set org.gnome.desktop.interface color-scheme "$v" 2>/dev/null
+        else gsettings reset org.gnome.desktop.interface color-scheme 2>/dev/null; fi
+        v="$(state_get theme gsettings_gtk)"
+        if [[ -n "$v" ]]; then gsettings set org.gnome.desktop.interface gtk-theme "$v" 2>/dev/null
+        else gsettings reset org.gnome.desktop.interface gtk-theme 2>/dev/null; fi
+    fi
+    rm -rf ~/.local/share/plasma/look-and-feel/com.valve.vapor.desktop \
+        ~/.local/share/plasma/desktoptheme/Vapor \
+        ~/.local/share/themes/Vapor \
+        ~/.local/share/color-schemes/Vapor.colors ~/.local/share/color-schemes/VGUI.colors \
+        ~/.local/share/konsole/Vapor.profile ~/.local/share/konsole/Vapor.colorscheme \
+        ~/.local/share/wallpapers/Steam\ Deck\ Logo*.jpg ~/.local/share/wallpapers/Troll.jpg
+    rm -f ~/.gtkrc-2.0
+    kbuildsycoca6 --noincremental 2>/dev/null || true
+
+    if [[ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]]; then
+        lookandfeeltool -a "$lookandfeel" >/dev/null 2>&1 || true
+        plasma-apply-colorscheme "$colorscheme" >/dev/null 2>&1 || true
+    fi
+    restart_plasmashell_if_stopped
+    state_clear theme
+    ok "Previous desktop look restored."
 }
