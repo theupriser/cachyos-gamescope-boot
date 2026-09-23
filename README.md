@@ -38,12 +38,12 @@ Everything you turn off is put back the way it was.
 Open **Konsole** on your Plasma desktop and run:
 
 ```bash
-bash <(curl -fsSL https://github.com/theupriser/cachyos-gamescope-boot/releases/download/latest/setup-gamescope-boot.sh)
+curl -fsSL https://github.com/theupriser/cachyos-gamescope-boot/releases/download/latest/setup-gamescope-boot.sh | bash
 ```
 
-That downloads and runs the latest single-file version. `curl -fsSL ... | bash`
-works too. Prefer to keep a copy, or to look at the script first? Clone the
-repository instead:
+That downloads and runs the latest single-file version, and works in any
+shell, including fish (CachyOS's default). Prefer to keep a copy, or to look
+at the script first? Clone the repository instead:
 
 ```bash
 git clone https://github.com/theupriser/cachyos-gamescope-boot.git
