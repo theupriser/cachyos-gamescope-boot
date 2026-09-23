@@ -118,11 +118,11 @@ EOF
     sudo udevadm control --reload
     sudo udevadm trigger --subsystem-match=leds --action=add
 
-    # steamos-manager is what Steam in gaming mode talks to for hardware
-    # settings (fan, HDMI-CEC TV control, performance); it knows the Steam
-    # Machine from its DMI data.
-    info "Installing steamos-manager (Steam Machine hardware settings in Steam)..."
-    sudo pacman -S --needed --noconfirm steamos-manager || { err "Installing steamos-manager failed."; return 1; }
+    # steamos-manager and inputplumber are what Steam in gaming mode talks to
+    # for hardware and controller settings; it knows the Steam Machine from its DMI data.
+    info "Installing hardware manager packages (steamos-manager & inputplumber)..."
+    sudo pacman -S --needed --noconfirm steamos-manager inputplumber || { err "Installing hardware manager packages failed."; return 1; }
+    sudo systemctl enable --now inputplumber.service
     sudo systemctl enable --now steamos-manager.service
     systemctl --user enable steamos-manager.service 2>/dev/null
     ok "Steam Machine support on."
@@ -132,7 +132,8 @@ machine_disable() {
     info "Removing Steam Machine support..."
     systemctl --user disable --now steamos-manager.service 2>/dev/null
     sudo systemctl disable --now steamos-manager.service 2>/dev/null
-    sudo pacman -Rns --noconfirm steamos-manager 2>/dev/null
+    sudo systemctl disable --now inputplumber.service 2>/dev/null
+    sudo pacman -Rns --noconfirm steamos-manager inputplumber 2>/dev/null
     sudo rm -f "$LED_UDEV_RULE" /etc/modules-load.d/leds-valve.conf
     sudo udevadm control --reload
     sudo modprobe -r leds-valve 2>/dev/null
