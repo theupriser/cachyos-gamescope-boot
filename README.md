@@ -1,172 +1,273 @@
 # CachyOS Gamescope Boot Wizard
 
-A setup script that makes a CachyOS desktop install (running KDE Plasma +
-`plasma-login-manager`) always boot into a **Steam Deck-style gamescope
-session** - the same "always boots into Big Picture, switch to desktop and
-back on demand" experience SteamOS gives you on a real Deck or the Valve
+Turn a CachyOS desktop PC into a SteamOS-style console: it boots straight
+into Steam's Big Picture (gamescope), and you can switch to the KDE Plasma
+desktop and back whenever you like - just like on a Steam Deck or Valve's
 Steam Machine.
 
-It exists because, as of the CachyOS March 2026 release (which switched the
-default login manager from SDDM to `plasma-login-manager`), the stock
-`gamescope-session-cachyos` tooling has a few gaps that stop this from
-working out of the box. This script patches around them.
+Out of the box, CachyOS doesn't quite manage this: the switch to the desktop
+can hang, and the PC doesn't reliably boot back into gaming mode. This
+script fixes that and sets everything up for you.
 
-## What's actually broken (and what this fixes)
+## What you get
 
-CachyOS's `gamescope-session-cachyos` package ships `steamos-session-select`,
-which is meant to work exactly like it does on real SteamOS. On a
-`plasma-login-manager` system, three things get in the way:
-
-1. **No `User=` written to the autologin config.**
-   `steam-set-session` (the script `steamos-session-select` calls under the
-   hood) only ever writes a `Session=` key to the autologin config file. On
-   SDDM this is fine, because SDDM's `User=` is set once by the installer and
-   never touched again. `plasma-login-manager` needs *both* `Session=` and
-   `User=` present to autologin at all - without `User=`, it just falls back
-   to showing the greeter every boot.
-
-2. **Missing `/etc/plasmalogin.conf.d` directory.**
-   If that directory doesn't exist, `steam-set-session` fails outright when
-   it tries to write to it. In practice this shows up as Steam's **"Switch to
-   Desktop"** hanging forever on a "Switching to Desktop" message with no way
-   back except a hard reset.
-
-3. **The base `/etc/plasmalogin.conf` wins over conf.d, and CachyOS ships it
-   hardcoded to `Session=plasma`.**
-   Every CachyOS tool that changes sessions (`steamos-session-select`, Steam's
-   power menu, and the `cachyos-gamescope-autologin.service` that's supposed
-   to reset you back to gamescope after a desktop session) only ever writes
-   to `/etc/plasmalogin.conf.d/zz-steamos-autologin.conf`. But the *base*
-   `/etc/plasmalogin.conf` file takes priority over that fragment, and it
-   ships with `Session=plasma` baked in - so none of those session switches
-   ever actually stick, no matter what the fragment says.
-
-This script fixes all three: it ensures the conf.d directory exists, sets the
-base config's `Session=`, `User=`, and `Relogin=true` correctly, and installs
-a small `systemd` path-watcher that keeps the base config in sync with
-whatever CachyOS's own tools write to the conf.d fragment - so switching
-sessions from inside Steam or the desktop actually works, in both
-directions, and resets to gamescope on the next boot by default (matching
-real Deck/SteamOS behavior).
-
-It also optionally offers to install Valve's official **Vapor** KDE Plasma
-theme - the same colors, icons, wallpapers, and Plasma look-and-feel package
-used on real SteamOS - pulled directly from Valve's own SteamOS package
-mirror, so your desktop session matches the gamescope side visually.
+- **Boots into gaming mode** automatically, without a login screen.
+- **Switch to Desktop** from Steam's power menu works, and so does going
+  back: use the **Return to Gaming Mode** icon on the desktop, or just log
+  out.
+- **Back to gaming mode after a restart**, like SteamOS.
+- **Steam's on-screen keyboard** (Steam + X) also works on the desktop.
+- *Optional:* the **SteamOS desktop look** - Valve's own Vapor theme,
+  wallpaper, dark mode and taskbar.
+- *Optional, Steam Machine only:* a driver for the **front LED bar**.
 
 ## Requirements
 
-- CachyOS (or an Arch-based system) with `pacman`
-- KDE Plasma installed
-- `plasma-login-manager` as the active display manager
-  *(the script will warn and ask for confirmation if it detects SDDM or
-  something else instead - most of these workarounds are specific to
-  `plasma-login-manager`)*
-- A regular user account with `sudo` access
+- CachyOS with the KDE Plasma desktop (the default CachyOS Desktop edition)
+- Your normal user account, with permission to use `sudo`
 
-## Usage
+## Installation
+
+Open **Konsole** on your Plasma desktop and run:
 
 ```bash
 git clone <this-repo-url>
 cd <this-repo>
-chmod +x setup-gamescope-boot.sh
 ./setup-gamescope-boot.sh
 ```
 
-Run it as your normal user, **not** as root - it calls `sudo` internally for
-the specific commands that need it.
+Run it as yourself, not as root. It asks for your password once, then asks a
+few yes/no questions (whether to install missing packages, the SteamOS look,
+and the LED driver on a Steam Machine). At the end it offers to restart.
 
-The script will:
+Keep the whole folder: the script needs the files in `lib/` next to it.
 
-1. Ask which user account should autologin into gamescope (defaults to
-   whoever's running the script).
-2. Check for and offer to install `gamescope-session-cachyos`, `steam`, and
-   `mangohud` if any are missing.
-3. Create `/etc/plasmalogin.conf.d` if it doesn't exist.
-4. Back up and rewrite `/etc/plasmalogin.conf`'s `[Autologin]` section.
-5. Remove any stray manual override files from earlier troubleshooting
-   attempts (only files matching `zzz-steamos-autologin*.conf` - it never
-   touches `zz-steamos-autologin.conf`, which CachyOS's own tools own).
-6. Install a sync script (`/usr/local/bin/sync-steamos-session.sh`) and a
-   `systemd` path unit that keeps the base config aligned with session
-   switches made through Steam or `steamos-session-select`.
-7. Ask whether you'd also like to install Valve's **Vapor** (Steam Deck) KDE
-   theme. If you say yes, it downloads the official `steamdeck-kde-presets`
-   package straight from Valve's SteamOS mirror and installs the color
-   scheme, Plasma look-and-feel package, wallpapers, and icons into your
-   user's `~/.local/share`. This step only touches your home directory -
-   nothing system-wide - and installing `curl`/`zstd` first if either is
-   missing. Apply it afterwards from **System Settings > Appearance >
-   Global Theme > Vapor (Steam Deck)** the next time you're in a Plasma
-   session.
+It's safe to run again later, for example after a CachyOS update.
 
-   If you keep a folder named `icons/` next to the script (e.g. custom Steam
-   Deck logo assets), it'll also copy those into the right Plasma icon
-   directories automatically. This is entirely optional - the theme installs
-   fine without it.
-8. Ask whether to reboot immediately to test the gamescope setup.
+## Using it
 
-It's **safe to re-run** - every step checks current state first, and any
-file it modifies gets backed up once with a `.bak-gamescope-wizard` suffix
-before the first change.
+- **To the desktop:** in gaming mode, open the Steam menu and choose
+  **Power > Switch to Desktop**.
+- **Back to gaming mode:** double-click **Return to Gaming Mode** on the
+  desktop, or log out.
+- After a restart you always start in gaming mode.
 
-## After running it
+Prefer to decide yourself where your PC starts? Run one of these in Konsole:
 
-Boot straight into gamescope: it should happen automatically. From inside
-gamescope, Steam's **Power > Switch to Desktop** should now work. From the
-desktop, logging out should drop you back into gamescope automatically
-(thanks to CachyOS's own `cachyos-gamescope-autologin.service`, which this
-script doesn't replace - it just makes sure the setting it writes actually
-takes effect).
+```bash
+steamos-session-select persistent  # start where you left off last time
+steamos-session-select oneshot     # always start in gaming mode (default)
+```
 
-You can also switch sessions manually at any time:
+## If something goes wrong
+
+**Gaming mode shows a black screen or keeps restarting.** Press
+**Ctrl+Alt+F3**, log in with your username and password, and run:
+
+```bash
+steamos-session-select plasma && sudo systemctl restart plasmalogin
+```
+
+That takes you back to the desktop.
+
+**The LED bar on the Steam Machine stays dark.** Restart the PC once more; a
+freshly installed driver often needs a reboot. Still dark? See
+[Front LED bar](#front-led-bar-steam-machine) under technical details.
+
+**Undo the SteamOS look:** pick another theme under **System Settings >
+Colors & Themes > Global Theme**.
+
+To remove everything the script set up, see
+[Removing everything](#removing-everything).
+
+---
+
+## Technical details
+
+### Why this is needed
+
+CachyOS's `gamescope-session-cachyos` package ships `steamos-session-select`,
+which is meant to work exactly like it does on real SteamOS. Since the March
+2026 release, CachyOS uses `plasma-login-manager` instead of SDDM, and three
+things get in the way:
+
+1. **No `User=` written to the autologin config.**
+   `steam-set-session` (called by `steamos-session-select`) only writes a
+   `Session=` key. `plasma-login-manager` needs both `Session=` and `User=`
+   to autologin at all; without `User=` it shows the greeter every boot.
+
+2. **Missing `/etc/plasmalogin.conf.d` directory.**
+   Without it, `steam-set-session` fails, and Steam's "Switch to Desktop"
+   hangs forever. *(Fixed upstream in `gamescope-session-cachyos` 1.1.6; the
+   script still creates the directory for older versions.)*
+
+3. **The base `/etc/plasmalogin.conf` wins over conf.d, and CachyOS ships it
+   with `Session=plasma`.**
+   Every tool that changes sessions (`steamos-session-select`, Steam's power
+   menu, and `cachyos-gamescope-autologin.service`, which resets you to
+   gamescope after a desktop session) only writes
+   `/etc/plasmalogin.conf.d/zz-steamos-autologin.conf`. The base file takes
+   priority, so none of those switches stick.
+
+The script sets `Session=`, `User=` and `Relogin=true` in the base config,
+and installs a small systemd path watcher that copies whatever CachyOS's
+tools write to the conf.d fragment into the base config.
+
+### What the script changes
+
+In order:
+
+1. Checks the display manager (warns if it isn't `plasma-login-manager`) and
+   that it runs as the user that should autologin.
+2. Installs missing packages: `gamescope-session-cachyos`, `steam`,
+   `mangohud`, `xterm`, `ttf-liberation`, `wqy-zenhei`, `plasma-keyboard`.
+3. Creates `/etc/plasmalogin.conf.d`, backs up and rewrites the
+   `[Autologin]` section of `/etc/plasmalogin.conf`, and removes stray
+   `zzz-steamos-autologin*.conf` files from manual troubleshooting (never
+   `zz-steamos-autologin.conf`, which CachyOS's tools own).
+4. Installs `/usr/local/bin/sync-steamos-session.sh` plus
+   `sync-steamos-session.path`/`.service`, which keep the base config in sync
+   with session switches.
+5. Sets up Steam for the desktop: `STEAM_GAMEPADUI_ARGS="-gamepadui -steamos3"`
+   (gamepad UI with Steam Deck glyphs), `KWIN_IM_SHOW_ALWAYS=1` for the
+   virtual keyboard, and a `steam-desktop-autostart` systemd user service
+   that starts Steam silently in Plasma only.
+6. *(Steam Machine, optional)* the LED driver - see below.
+7. *(Optional)* the SteamOS desktop look - see below.
+8. Creates the **Return to Gaming Mode** shortcut, with a narrow sudoers rule
+   (`/etc/sudoers.d/gamescope-session-switch`) so it can restart the login
+   manager without a password prompt.
+
+Re-running doesn't duplicate any settings. Every system file it modifies is
+backed up once, next to the original, with a `.bak-gamescope-wizard` suffix.
+
+### SteamOS desktop look
+
+Downloads Valve's official `steamdeck-kde-presets` package from Valve's
+SteamOS mirror and installs it into `~/.local/share` - nothing system-wide:
+
+- the Vapor global theme, color scheme, Plasma style, wallpapers and icons;
+- the Vapor GTK theme, Konsole profile and user avatars;
+- Valve's SteamOS desktop defaults, merged into your own config: Noto Sans
+  fonts, no Xwayland input-permission prompt for Steam Input, the window
+  rule that keeps the Steam keyboard on top and out of the taskbar, no
+  screen locking, no welcome screen, light file indexing;
+- the SteamOS panel: solid (not floating), full width, 44 px high, tray icons
+  scaled to fit, date below the time, and the SteamOS launcher icon;
+- dark mode for GTK, libadwaita and portal-aware apps (Firefox, Flatpaks).
+
+Run inside a Plasma session, it applies everything live; otherwise it takes
+effect at the next desktop login.
+
+**Package version.** The script always takes the newest
+`steamdeck-kde-presets` from the highest-numbered SteamOS release repository
+on the mirror (`jupiter-3.9`, `jupiter-3.10`, ...). That repository's pacman
+database gives the exact file name and SHA-256 checksum, which is verified
+after downloading. If the lookup fails, it falls back to the known-good
+3.9.4 (see `install_vapor_theme()` in `lib/vapor-theme.sh`). To check the
+current version yourself:
+
+```bash
+m=https://steamdeck-packages.steamos.cloud/archlinux-mirror
+r=$(curl -fsL $m/ | grep -oE 'jupiter-[0-9]+\.[0-9]+/' | tr -d / | sort -V | tail -n 1)
+curl -fsL $m/$r/os/x86_64/$r.db | bsdtar -tf - | grep -o '^steamdeck-kde-presets-[^/]*' | sort -u
+```
+
+### Front LED bar (Steam Machine)
+
+Standard desktop kernels, including CachyOS's, lack Valve's `leds-valve`
+driver, so the Steam Machine's front LED bar goes dark or "breathes". On
+Fremont hardware (DMI `Valve`/`Fremont`) the script offers to:
+
+- install an AUR helper (`yay`) if neither `yay` nor `paru` is present;
+- install the kernel headers for every installed kernel;
+- install `leds-valve-dkms-git` from the AUR, build it for the running
+  kernel, and load it at every boot (`/etc/modules-load.d/leds-valve.conf`);
+- optionally install the experimental `openrgb-git`, which can drive the bar.
+
+The LEDs appear as `/sys/class/leds/valve-leds*`. Steam itself only drives
+the bar (e.g. download progress) in real SteamOS Game Mode.
+
+The driver's Makefile builds against the running kernel, so after a kernel
+update, boot the new kernel and re-run the script (or
+`sudo dkms install leds-valve-dkms/0.1 -k "$(uname -r)"`).
+
+Troubleshooting:
+
+```bash
+dkms status
+ls /sys/class/leds | grep valve
+sudo dmesg | grep -i valve
+cat /var/lib/dkms/leds-valve-dkms/0.1/build/make.log
+```
+
+### Manual session control
 
 ```bash
 steamos-session-select gamescope   # switch to gamescope right now
 steamos-session-select plasma      # switch to desktop right now
-steamos-session-select persistent  # remember whichever session you used last, across reboots
-steamos-session-select oneshot     # always start in gamescope regardless of what you used last (the default Deck-like behavior)
+steamos-session-select persistent  # remember the last-used session across reboots
+steamos-session-select oneshot     # always start in gamescope (default, like a Deck)
 ```
 
-## Restoring the originals
+With `Relogin=true`, a gamescope session that fails to start is restarted
+immediately, which can turn into a loop - hence the Ctrl+Alt+F3 escape above.
 
-Every file the script modifies is backed up next to itself:
+### Removing everything
 
 ```bash
+# restore the original login config
 sudo cp /etc/plasmalogin.conf.bak-gamescope-wizard /etc/plasmalogin.conf
-```
 
-To fully remove the sync watcher this script adds:
-
-```bash
+# session sync watcher
 sudo systemctl disable --now sync-steamos-session.path
 sudo rm /etc/systemd/system/sync-steamos-session.path
 sudo rm /etc/systemd/system/sync-steamos-session.service
 sudo rm /usr/local/bin/sync-steamos-session.sh
 sudo systemctl daemon-reload
+
+# shortcut and its sudoers rule
+sudo rm /etc/sudoers.d/gamescope-session-switch
+rm ~/Desktop/"Return to Gaming Mode.desktop"
+
+# Steam desktop autostart and environment
+systemctl --user disable --now steam-desktop-autostart.service
+rm ~/.config/systemd/user/steam-desktop-autostart.service
+rm ~/.config/environment.d/99-gamescope-steam-glyphs.conf \
+   ~/.config/environment.d/99-kde-virtual-keyboard.conf
+
+# LED driver (Steam Machine)
+sudo rm /etc/modules-load.d/leds-valve.conf
+sudo pacman -R leds-valve-dkms-git
 ```
 
-## Caveats
+### Project layout
 
-- This works around current CachyOS/`plasma-login-manager` behavior as of
-  September 2026. If CachyOS fixes `steam-set-session` upstream to write
-  `User=` and to target whichever base config the login manager actually
-  reads, this script becomes unnecessary - check for updates before running
-  it on a freshly reinstalled system.
-- Tested on a Valve Steam Machine (desktop AMD APU + discrete GPU) running
-  CachyOS Desktop edition. Should apply to any CachyOS desktop install using
-  `plasma-login-manager`, but hasn't been tested on Steam Deck/Legion Go
-  hardware, which typically ship with SDDM instead.
-- If you find CachyOS has patched the underlying issue, please open an issue
-  or PR here so the script can detect that and skip the workaround.
-- The Vapor theme step depends on Valve's `steamdeck-kde-presets` package
-  staying available at its current URL and version
-  (`steamdeck-kde-presets-0.29-1-any.pkg.tar.zst` on
-  `steamdeck-packages.steamos.cloud`). If Valve ships a newer version or
-  changes the mirror layout, update `pkg_ver` near the top of
-  `install_vapor_theme()` in the script.
+| File | Responsibility |
+|---|---|
+| `setup-gamescope-boot.sh` | Entry point: user and sudo checks, step order, summary, reboot |
+| `lib/common.sh` | Output helpers, yes/no prompts, backups |
+| `lib/packages.sh` | Required packages, AUR helper (yay/paru) |
+| `lib/login-manager.sh` | plasmalogin autologin, session sync bridge and its systemd units |
+| `lib/steam-desktop.sh` | Steam in the Plasma session: gamepad UI flags, virtual keyboard, autostart |
+| `lib/led-driver.sh` | Fremont detection, kernel headers, LED driver, OpenRGB |
+| `lib/vapor-theme.sh` | Vapor theme, Valve's SteamOS defaults, panel, dark mode |
+| `lib/desktop-shortcut.sh` | Return to Gaming Mode shortcut and its sudoers rule |
 
-## Related upstream reports
+Notes for contributors and AI coding agents are in [`AGENTS.md`](AGENTS.md).
+
+### Caveats
+
+- This works around CachyOS/`plasma-login-manager` behavior as of September
+  2026. If CachyOS fixes `steam-set-session` upstream, parts of this script
+  become unnecessary - please open an issue or PR if you notice that.
+- Tested on a Valve Steam Machine running CachyOS Desktop edition. It should
+  work on any CachyOS desktop install using `plasma-login-manager`, but
+  hasn't been tested on Steam Deck/Legion Go hardware, which typically use
+  SDDM. With another display manager the script warns and asks before
+  continuing.
+
+### Related upstream reports
 
 - [CachyOS/gamescope-session#9](https://github.com/CachyOS/gamescope-session/issues/9) - "Switch to Desktop" hang due to missing `/etc/plasmalogin.conf.d`
 
