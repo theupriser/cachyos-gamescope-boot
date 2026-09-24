@@ -44,7 +44,13 @@ Machine LED driver works on every installed kernel and survives kernel updates.
   - Fix a shellcheck warning in the bundle (a variable name shared with
     `lib/state.sh`), which would have failed the CI check.
 - `d7231eb` **chore: Move the bundle tool to .github/tools/bundle.sh**
-- **docs: Commit hashes in the changelog**
+- `5c00504` **docs: Commit hashes in the changelog**
+- **ci: A release per version (tag v0.7.0, ...) instead of overwriting "latest"**
+  - Each push to `main` publishes release `v$VERSION` with that version's
+    changelog; an already released version is never overwritten (pull requests
+    get a warning when `VERSION` wasn't bumped).
+  - Install with `.../releases/latest/download/setup-gamescope-boot.sh`, which
+    always points to the newest release.
 
 ## 0.6.2 - 2026-09-23
 

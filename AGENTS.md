@@ -35,8 +35,9 @@ gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
   the entry point's `for lib in ...; do` source loop and wraps everything
   after that loop in `main()`. Keep that loop on one line, keep all logic in
   functions, and don't rely on `SCRIPT_DIR` for anything but sourcing.
-  CI (`.github/workflows/bundle.yml`) publishes the bundle to the `latest`
-  release on pushes to `main`.
+  CI (`.github/workflows/bundle.yml`) publishes the bundle as release
+  `v$VERSION` on pushes to `main`; an existing version is never overwritten,
+  so bump `VERSION` for every release.
 
 ## Conventions
 

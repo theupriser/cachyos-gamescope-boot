@@ -38,7 +38,7 @@ Everything you turn off is put back the way it was.
 Open **Konsole** on your Plasma desktop and run:
 
 ```bash
-curl -fsSL https://github.com/theupriser/cachyos-gamescope-boot/releases/download/latest/setup-gamescope-boot.sh | bash
+curl -fsSL https://github.com/theupriser/cachyos-gamescope-boot/releases/latest/download/setup-gamescope-boot.sh | bash
 ```
 
 That downloads and runs the latest single-file version, and works in any
@@ -334,7 +334,8 @@ gamescope-session, ...) stay installed.
 
 The single-file version is generated: on every push to `main`, GitHub
 Actions runs `.github/tools/bundle.sh`, checks the result with `bash -n` and
-shellcheck, and uploads it to the rolling `latest` release. It inlines
+shellcheck, and publishes it as a release per version (tag `v<VERSION>`,
+never overwritten; the newest is marked latest). It inlines
 `lib/*.sh` and wraps the entry point in `main()`, so bash has read the whole
 file before anything runs; when stdin is a pipe (`curl | bash`) it reattaches
 the terminal for the menu (set `WIZARD_KEEP_STDIN=1` to keep piped input).
