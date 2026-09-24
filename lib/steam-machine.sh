@@ -15,36 +15,36 @@ detect_valve_fremont() {
 }
 
 install_pinned_kernel() {
-    # Define URLs
+    # Define urls for downloading the kernel and it's headers
     local KERNEL_URL="https://archive.cachyos.org/archive/cachyos/linux-cachyos-7.1.6-1-x86_64.pkg.tar.zst"
     local KERNEL_SIG_URL="https://archive.cachyos.org/archive/cachyos/linux-cachyos-7.1.6-1-x86_64.pkg.tar.zst.sig"
     local HEADERS_URL="https://archive.cachyos.org/archive/cachyos/linux-cachyos-headers-7.1.6-1-x86_64.pkg.tar.zst"
     local HEADERS_SIG_URL="https://archive.cachyos.org/archive/cachyos/linux-cachyos-headers-7.1.6-1-x86_64.pkg.tar.zst.sig"
 
-    # Extract filenames from URLs
+    # Resolve filenames
     local KERNEL_PKG=$(basename "$KERNEL_URL")
-    local KERNEL_SIG=$(basename "$KERNEL_SIG_URL")
     local HEADERS_PKG=$(basename "$HEADERS_URL")
-    local HEADERS_SIG=$(basename "$HEADERS_SIG_URL")
 
-    info "Downloading CachyOS kernel packages and signatures..."
+    info "Downloading CachyOS kernel packages and headers..."
     wget -c "$KERNEL_URL" "$KERNEL_SIG_URL" "$HEADERS_URL" "$HEADERS_SIG_URL" || { err "Failed to download kernel packages."; return 1; }
 
-    info "Verifying package signatures..."
-    if ! gpg --verify "$KERNEL_SIG" "$KERNEL_PKG" || ! gpg --verify "$HEADERS_SIG" "$HEADERS_PKG"; then
-        err "Signature verification failed!"
-        return 1
-    fi
-
-    info "Verification successful. Installing packages..."
+    info "Installing packages and verifying signatures via pacman..."
     sudo pacman -U --noconfirm "$KERNEL_PKG" "$HEADERS_PKG" || { err "Failed to install packages."; return 1; }
 
     info "Locking the kernel packages to prevent updates..."
-    # This appends the kernel and headers to the IgnorePkg array in /etc/pacman.conf
+    sudo sed -i '/^IgnorePkg/s/ linux-cachyos linux-cachyos-headers//' /etc/pacman.conf
     sudo sed -i '/^#IgnorePkg/s/^#//' /etc/pacman.conf
     sudo sed -i '/^IgnorePkg/ s/$/ linux-cachyos linux-cachyos-headers/' /etc/pacman.conf
 
-    ok "Installation complete and kernel successfully locked."
+    # FIX: Recover symlinks directly to accompany led install
+    local CURRENT_KVER="7.1.6-1-cachyos"
+    if [ -d "/usr/src/linux-${CURRENT_KVER}" ]; then
+        info "Koppelen van kernel-headers symlink..."
+        sudo ln -snf "/usr/src/linux-${CURRENT_KVER}" "/usr/lib/modules/${CURRENT_KVER}/build"
+    fi
+
+    rm -f "$KERNEL_PKG" "${KERNEL_PKG}.sig" "$HEADERS_PKG" "${HEADERS_PKG}.sig"
+    ok "Custom kernel setup finished."
 }
 
 install_kernel_headers() {
@@ -52,8 +52,17 @@ install_kernel_headers() {
     # installed. CachyOS ships several kernels (linux-cachyos, -lts, -bore,
     # ...); install the matching -headers package for every one present.
     local -a kernels headers=()
-    mapfile -t kernels < <(pacman -Qqo /usr/lib/modules/*/pkgbase 2>/dev/null | sort -u)
     local k
+    local target_kver="7.1.6-1-cachyos"
+
+    # FIX: Als de specifieke 7.1.6 headers al lokaal op de schijf staan, hoeft pacman niks te doen
+    if [ -d "/usr/src/linux-${target_kver}" ] || [ -d "/usr/lib/modules/${target_kver}/build" ]; then
+        info "Geverifieerd: Gevolgde CachyOS 7.1.6 headers zijn reeds lokaal aanwezig. Pacman-update overgeslagen."
+        return 0
+    fi
+
+    # Originele fallback-loop voor het geval er andere kernels actief zijn
+    mapfile -t kernels < <(pacman -Qqo /usr/lib/modules/*/pkgbase 2>/dev/null | sort -u)
     for k in "${kernels[@]}"; do
         pacman -Si "${k}-headers" >/dev/null 2>&1 && headers+=("${k}-headers")
     done
