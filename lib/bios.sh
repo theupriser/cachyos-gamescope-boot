@@ -174,7 +174,10 @@ bios_enable() {
 
     if [[ -n "$BIOS_DRY_RUN" ]]; then
         ok "Dry run: would now run: sudo fwupdmgr install -y --no-reboot-check $BIOS_CAB"
-        ok "Dry run finished; nothing was flashed and no restart is needed."
+        ok "Dry run finished; nothing was flashed."
+        # Treated as staged, so the restart choices that follow a real
+        # update show up too; restarting only prints (see restart_now).
+        BIOS_NEEDS_RESTART=1
         rm -rf "$tmp"
         return 0
     fi

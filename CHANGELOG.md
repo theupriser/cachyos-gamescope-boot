@@ -25,7 +25,7 @@ every run. Merged together with 0.7.0, so v0.8.0 is the release that has both.
 - `b70c9d6` **fix: shellcheck in the bundle, and the docs for the BIOS checks**
   - A variable name in `lib/bios.sh` clashed with `lib/state.sh` in the bundle
     (CI's shellcheck would fail); README, AGENTS.md and this changelog updated.
-- **feat: Menu comes back after each run, BIOS dry run, version 0.8.0**
+- `54fc9e3` **feat: Menu comes back after each run, BIOS dry run, version 0.8.0**
   - After a run the menu returns with the new state; quit with `q`. When
     something needs a restart, choose between back to the menu (`m`) and
     restart now (`r`); quitting asks once more.
@@ -33,6 +33,9 @@ every run. Merged together with 0.7.0, so v0.8.0 is the release that has both.
   - `WIZARD_BIOS_DRY_RUN=1` walks through the whole BIOS update (download,
     checksum, both warnings) but only prints the install and never flashes.
   - README: the menu loop and the BIOS update step by step.
+- **fix: BIOS dry run also walks through the restart choices**
+  - A dry run counts as staged, so `[m]`/`[r]` and the restart question on `q`
+    show up; in dry-run mode restarting only prints what it would do.
 
 ## 0.7.0 - 2026-09-24
 

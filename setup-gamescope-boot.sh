@@ -46,6 +46,10 @@ restart_now() {
         warn "The BIOS update is written during this restart. Keep the power on and don't"
         warn "touch the machine until it has fully started again, even if the screen stays black."
     fi
+    if [[ -n "${BIOS_DRY_RUN:-}" ]]; then
+        ok "Dry run: would restart now (sudo reboot); not restarting."
+        exit 0
+    fi
     info "Restarting..."
     sudo reboot
     exit 0
@@ -131,13 +135,13 @@ if [[ -n "${BIOS_NEEDS_RESTART:-}" ]]; then
     warn "The BIOS update is written during the next restart. Keep the power on and"
     warn "don't touch the machine until it has fully started again, even if the screen stays black."
     if ask_yn "Restart now to install the BIOS update?" n; then
-        sudo reboot
+        restart_now
     else
         info "The BIOS update installs at your next restart."
     fi
 elif [[ "$RESTART_FOR_LOGIN" == true ]]; then
     if ask_yn "Restart now so the changes take effect?" n; then
-        sudo reboot
+        restart_now
     else
         info "Restart whenever you're ready."
     fi
