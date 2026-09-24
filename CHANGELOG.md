@@ -39,7 +39,8 @@ every run. Merged together with 0.7.0, so v0.8.0 is the release that has both.
 - `429e840` **fix: Shorter BIOS labels so the menu fits 80 columns**
   - "now F7F0107, newest F7F0108 (own risk)", "F7F0108 waits for a restart",
     "F7F0107 is up to date"; shorter dry-run line.
-- **fix: Kernel legend only mentions the LEDs on a Steam Machine**
+- `99a95ab` **fix: Kernel legend only mentions the LEDs on a Steam Machine**
+- **docs: Last commit hash in the changelog**
 
 ## 0.7.0 - 2026-09-24
 
