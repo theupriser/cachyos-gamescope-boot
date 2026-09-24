@@ -97,7 +97,7 @@ while true; do
     echo -e "${c_bold}This will:${c_reset}"
     for c in "${TO_DISABLE[@]}"; do echo "  - turn off: ${LABEL[$c]}"; done
     for c in "${TO_ENABLE[@]}"; do
-        if is_action "$c"; then echo "  - run:      ${LABEL[$c]%%:*} (checks, then asks twice more)"
+        if is_action "$c"; then echo "  - run:      ${LABEL[$c]%%:*} at your own risk (checks, then asks twice more)"
         elif [[ "${CURRENT[$c]}" == 1 ]]; then echo "  - re-apply: ${LABEL[$c]}"; else echo "  - turn on:  ${LABEL[$c]}"; fi
     done
     ask_yn "Go ahead?" y || { info "Nothing changed."; continue; }

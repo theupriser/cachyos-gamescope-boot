@@ -53,12 +53,19 @@ bios_selectable() {
 }
 
 bios_label() {
-    # Menu label with the current and the newest version.
-    local newest="newest unknown (offline?)"
-    [[ -n "${BIOS_NEWEST:-}" ]] && newest="newest $BIOS_NEWEST"
-    [[ "${BIOS_NEWEST:-}" == "$(bios_current)" ]] && newest="up to date"
-    [[ -n "${BIOS_NEEDS_RESTART:-}" ]] && newest="$BIOS_NEWEST staged, restart to install"
-    echo "Update BIOS (at your own risk): now $(bios_current), $newest"
+    # Menu label with the current and the newest version; kept short so the
+    # row (with "(not available)" when greyed out) fits 80 columns.
+    local current
+    current="$(bios_current)"
+    if [[ -n "${BIOS_NEEDS_RESTART:-}" ]]; then
+        echo "Update BIOS: $BIOS_NEWEST waits for a restart"
+    elif [[ -z "${BIOS_NEWEST:-}" ]]; then
+        echo "Update BIOS: now $current, newest unknown (offline?)"
+    elif [[ "$BIOS_NEWEST" == "$current" ]]; then
+        echo "Update BIOS: $current is up to date"
+    else
+        echo "Update BIOS: now $current, newest $BIOS_NEWEST (own risk)"
+    fi
 }
 
 BIOS_BOX_WIDTH=68
@@ -173,7 +180,7 @@ bios_enable() {
     fi
 
     if [[ -n "$BIOS_DRY_RUN" ]]; then
-        ok "Dry run: would now run: sudo fwupdmgr install -y --no-reboot-check $BIOS_CAB"
+        ok "Dry run: would run: fwupdmgr install -y --no-reboot-check $(basename "$BIOS_CAB")"
         ok "Dry run finished; nothing was flashed."
         # Treated as staged, so the restart choices that follow a real
         # update show up too; restarting only prints (see restart_now).

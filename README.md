@@ -298,7 +298,7 @@ ships (the `.cab` file in its `fremont-hw-support` package, looked up on
 Valve's SteamOS mirror):
 
 ```
- [ ] Update BIOS (at your own risk): now F7F0107, newest F7F0108  (opt-in, runs once)
+ [ ] Update BIOS: now F7F0107, newest F7F0108 (own risk)  (opt-in, runs once)
 ```
 
 It can only be ticked when Valve has a newer BIOS than yours; when you're up
