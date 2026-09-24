@@ -12,7 +12,7 @@ gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
 
 ## Layout
 
-- `setup-gamescope-boot.sh` - the only entry point. Pre-flight checks,
+- `steamify.sh` - the only entry point. Pre-flight checks,
   sources `lib/*.sh`, runs the menu and applies the plan. No component
   logic here.
 - `lib/*.sh` - one file per responsibility, each defining functions only
@@ -59,7 +59,7 @@ gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
 - Comments explain *why* (the CachyOS/Plasma quirk being worked around),
   not what the next line does.
 
-- **Versioning and releases.** SemVer in `VERSION` (`setup-gamescope-boot.sh`,
+- **Versioning and releases.** SemVer in `VERSION` (`steamify.sh`,
   shown in the menu header and the bundle header).
   - Every commit gets an entry in `CHANGELOG.md` under its version (short hash
     + subject; a commit can't contain its own hash, so fill it in with the
@@ -70,7 +70,7 @@ gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
     changelog section) and marks it latest. An existing version is never
     overwritten: without a bump nothing is released, and pull requests show
     a warning.
-  - Users install through `releases/latest/download/setup-gamescope-boot.sh`
+  - Users install through `releases/latest/download/steamify.sh`
     (GitHub's newest release). The `latest` tag and release follow the newest
     version tag too (moved, asset replaced, when a new version is released),
     so the older URL `releases/download/latest/...` keeps working.
@@ -150,7 +150,7 @@ gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
   restart is needed), until `q`; the restart question is asked once at the
   end. Scripted input that runs out ends the loop like `q`.
 - Steamify shortcut (`launcher`): the icon runs `curl | bash` of
-  `releases/latest/download/setup-gamescope-boot.sh` in Konsole, so it's
+  `releases/latest/download/steamify.sh` in Konsole, so it's
   always the newest release. Its icon, `assets/steam-gaming-settings.svg`
   (Valve's GPL-2.0 return icon with a gear), is a release asset too, and is
   downloaded from there (Steam's icon if that fails). Desktop files are
@@ -169,8 +169,8 @@ array (e.g. `g` in `lib/state.sh`), or CI's shellcheck on the bundle fails.
 There is no test suite. At minimum:
 
 ```bash
-for f in setup-gamescope-boot.sh lib/*.sh; do bash -n "$f"; done
-shellcheck -S warning setup-gamescope-boot.sh lib/*.sh   # if available
+for f in steamify.sh lib/*.sh; do bash -n "$f"; done
+shellcheck -S warning steamify.sh lib/*.sh   # if available
 ```
 
 Behaviour is verified in a CachyOS QEMU/KVM test VM. The VM scripts and a

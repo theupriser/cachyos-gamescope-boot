@@ -1,6 +1,6 @@
 #!/bin/bash
 # "Return to Gaming Mode" desktop shortcut and the sudoers rule it needs.
-# Sourced by setup-gamescope-boot.sh; not meant to be run on its own.
+# Sourced by steamify.sh; not meant to be run on its own.
 
 create_desktop_shortcut() {
     # Determine the home directory of the target user

@@ -1,7 +1,7 @@
 #!/bin/bash
 # Interactive menu: detects which components are on, lets the user pick what
 # they want, then turns components on or off to match.
-# Sourced by setup-gamescope-boot.sh; not meant to be run on its own.
+# Sourced by steamify.sh; not meant to be run on its own.
 
 # Menu order. Components are turned on in this order and off in reverse;
 # gaming must come first (single user builds on it).

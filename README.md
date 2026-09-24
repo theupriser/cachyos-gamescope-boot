@@ -44,17 +44,19 @@ Everything you turn off is put back the way it was.
 Open **Konsole** on your Plasma desktop and run:
 
 ```bash
-curl -fsSL https://github.com/theupriser/steamify-cachyos/releases/latest/download/setup-gamescope-boot.sh | bash
+curl -fsSL https://github.com/theupriser/steamify-cachyos/releases/latest/download/steamify.sh | bash
 ```
 
-That downloads and runs the latest single-file version, and works in any
+(Before 0.9.0 the script was called `setup-gamescope-boot.sh`; that name
+still works in the download URL.) That downloads and runs the latest
+single-file version, and works in any
 shell, including fish (CachyOS's default). Prefer to keep a copy, or to look
 at the script first? Clone the repository instead:
 
 ```bash
 git clone https://github.com/theupriser/steamify-cachyos.git
 cd steamify-cachyos
-./setup-gamescope-boot.sh
+./steamify.sh
 ```
 
 Run it as yourself, not as root. You'll see a checklist:
@@ -351,7 +353,7 @@ gamescope-session, ...) stay installed.
 
 | File | Responsibility |
 |---|---|
-| `setup-gamescope-boot.sh` | Entry point: checks, menu, apply, summary, restart |
+| `steamify.sh` | Entry point: checks, menu, apply, summary, restart |
 | `lib/menu.sh` | The menu: detect, toggle, plan and apply changes |
 | `lib/state.sh` | Undo journal for KDE settings (`kset`/`krevert`) |
 | `lib/common.sh` | Output helpers, prompts, backups, plasmashell handling |
@@ -365,7 +367,7 @@ gamescope-session, ...) stay installed.
 | `lib/wizard-shortcut.sh` | Steamify shortcut: desktop icon and launcher entry that run the newest release |
 | `lib/bios.sh` | Update BIOS (Steam Machine, opt-in): current/newest version, double confirmation, fwupd |
 | `lib/steam-machine.sh` | Steam Machine support: LED driver, LED access, steamos-manager |
-| `.github/tools/bundle.sh` | Builds the single-file version (`dist/setup-gamescope-boot.sh`) |
+| `.github/tools/bundle.sh` | Builds the single-file version (`dist/steamify.sh`) |
 | `.github/workflows/bundle.yml` | Builds and checks it on every push; publishes it on `main` |
 
 The single-file version is generated: on every push to `main`, GitHub

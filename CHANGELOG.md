@@ -2,7 +2,7 @@
 
 All notable changes, per version and per commit. Versions follow
 [Semantic Versioning](https://semver.org/); the current one is `VERSION` in
-`setup-gamescope-boot.sh`. Versions before 0.7.0 were numbered afterwards,
+`steamify.sh`. Versions before 0.7.0 were numbered afterwards,
 one per merged pull request.
 
 ## 0.9.0 - 2026-09-24
@@ -21,12 +21,16 @@ itself on the desktop.
 - `be874b8` **feat: Rename to Steamify CachyOS**
   - Menu header, the shortcut ("Steamify CachyOS", menu item "Steamify
     shortcut"), release titles, README and AGENTS.md.
-- **chore: Repository renamed to steamify-cachyos**
+- `1c34a97` **chore: Repository renamed to steamify-cachyos**
   - All URLs point to `github.com/theupriser/steamify-cachyos` (the old ones
     redirect). The script keeps its name, `setup-gamescope-boot.sh`, so the
     old download URL keeps working; internal names such as
     `~/.local/state/cachyos-gamescope-boot` stay, so existing installs can
     still be turned off.
+- **feat: The script is now steamify.sh**
+  - `setup-gamescope-boot.sh` is renamed to `steamify.sh`; releases publish the
+    bundle under both names, so `.../download/setup-gamescope-boot.sh` keeps
+    working. The Steamify shortcut runs `steamify.sh`.
 
 ## 0.8.0 - 2026-09-24 (#8)
 

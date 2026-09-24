@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# setup-gamescope-boot.sh - Steamify CachyOS
+# steamify.sh - Steamify CachyOS
 #
 # Wizard that makes a CachyOS (KDE Plasma) install behave like SteamOS:
 # boot into a Steam Deck-style gamescope session, switch to the Plasma

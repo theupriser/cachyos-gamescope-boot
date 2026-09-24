@@ -1,7 +1,7 @@
 #!/bin/bash
 # "Steam Machine support" menu item, only on Valve Fremont hardware: the
 # front LED bar driver, LED access for Steam, and steamos-manager.
-# Sourced by setup-gamescope-boot.sh; not meant to be run on its own.
+# Sourced by steamify.sh; not meant to be run on its own.
 
 detect_valve_fremont() {
     # Valve Steam Machine (Fremont) boards. The leds-valve driver's own DMI

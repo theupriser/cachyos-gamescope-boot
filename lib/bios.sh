@@ -3,7 +3,7 @@
 # the newest Steam Machine BIOS from Valve's fremont-hw-support package with
 # fwupd. It's an action, not an on/off component: never preselected, never
 # re-applied, and there is nothing to turn off afterwards.
-# Sourced by setup-gamescope-boot.sh; not meant to be run on its own.
+# Sourced by steamify.sh; not meant to be run on its own.
 
 BIOS_REPO_PREFIX=holo
 # WIZARD_BIOS_DRY_RUN=1 walks through the whole BIOS update (download,

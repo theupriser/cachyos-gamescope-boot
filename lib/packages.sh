@@ -1,6 +1,6 @@
 #!/bin/bash
 # Required packages and AUR helper handling.
-# Sourced by setup-gamescope-boot.sh; not meant to be run on its own.
+# Sourced by steamify.sh; not meant to be run on its own.
 
 aur_noninteractive_flags() {
     # Fully non-interactive install flags for the given AUR helper: no

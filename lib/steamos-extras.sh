@@ -6,7 +6,7 @@
 # rule and an empty KWallet. Part of the SteamOS theme component
 # (lib/vapor-theme.sh). System files go to /usr/local (nothing
 # package-owned); per-user settings go through the undo journal.
-# Sourced by setup-gamescope-boot.sh; not meant to be run on its own.
+# Sourced by steamify.sh; not meant to be run on its own.
 
 VALVE_MIRROR="https://steamdeck-packages.steamos.cloud/archlinux-mirror"
 NESTED_DIR=/usr/local/share/applications/steam/holo-nested-desktop

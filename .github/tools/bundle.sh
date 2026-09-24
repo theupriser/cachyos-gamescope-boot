@@ -1,16 +1,16 @@
 #!/bin/bash
 # Build a single-file version of the wizard for `curl | bash` use:
-#   .github/tools/bundle.sh [output]      (default: dist/setup-gamescope-boot.sh)
+#   .github/tools/bundle.sh [output]      (default: dist/steamify.sh)
 #
-# Inlines lib/*.sh in the order setup-gamescope-boot.sh sources them and
+# Inlines lib/*.sh in the order steamify.sh sources them and
 # wraps the entry point's body in main(), so bash has read the whole file
 # before anything runs. That lets the bundle reattach stdin to the terminal
 # when it was piped in by curl, so the interactive menu still works.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
-out="${1:-dist/setup-gamescope-boot.sh}"
-entry=setup-gamescope-boot.sh
+out="${1:-dist/steamify.sh}"
+entry=steamify.sh
 mkdir -p "$(dirname "$out")"
 
 # Library order, taken from the entry point's source loop.
@@ -28,10 +28,10 @@ version="v$(grep -oP '^VERSION=\K.*' "$entry"), $(git describe --always --dirty 
     for lib in $libs; do
         echo "# ----- lib/$lib.sh -----"
         # Drop each module's shebang and its "Sourced by ..." boilerplate.
-        sed -e '1{/^#!/d}' -e '/^# Sourced by setup-gamescope-boot.sh/d' "lib/$lib.sh"
+        sed -e '1{/^#!/d}' -e '/^# Sourced by steamify.sh/d' "lib/$lib.sh"
         echo
     done
-    echo "# ----- setup-gamescope-boot.sh -----"
+    echo "# ----- steamify.sh -----"
     echo "main() {"
     # Everything after the source loop is the entry point's body.
     sed -n '/^for lib in /,$p' "$entry" | sed '1,/^done$/d' | sed 's/^/    /; s/^    $//'
