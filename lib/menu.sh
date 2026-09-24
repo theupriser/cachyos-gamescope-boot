@@ -29,6 +29,13 @@ component_available() {
 
 is_action() { [[ " ${ACTIONS[*]} " == *" $1 "* ]]; }
 
+component_selectable() {
+    # Greyed out and not tickable when it has nothing to do.
+    case "$1" in
+        bios) bios_selectable ;;
+    esac
+}
+
 detect_components() {
     local c any=false
     for c in "${COMPONENTS[@]}"; do
@@ -48,6 +55,7 @@ detect_components() {
 
 toggle_component() {
     local c="$1"
+    component_selectable "$c" || return 1
     WANTED[$c]=$(( 1 - WANTED[$c] ))
     # Single user mode only makes sense on top of the SteamOS conversion.
     if [[ "$c" == single && "${WANTED[single]}" == 1 ]]; then WANTED[gaming]=1; fi
@@ -62,10 +70,17 @@ show_menu() {
     for c in "${COMPONENTS[@]}"; do
         component_available "$c" || continue
         i=$((i + 1)); MENU_ITEMS[$i]=$c
-        now="off"; [[ "${CURRENT[$c]}" == 1 ]] && now="${c_green}on${c_reset} "
+        # Pad the plain word, then colour it: colour codes would count as width.
+        now="off"; [[ "${CURRENT[$c]}" == 1 ]] && now="on"
         is_action "$c" && now="-"
+        now="$(printf '%-6s' "$now")"
+        [[ "${CURRENT[$c]}" == 1 ]] && now="${now/on/${c_green}on${c_reset}}"
         want="[ ]"; [[ "${WANTED[$c]}" == 1 ]] && want="[x]"
-        printf "  %-3s %-6b %-6s %s\n" "$i" "$now  " "$want" "${LABEL[$c]}"
+        if component_selectable "$c"; then
+            printf "  %-3s %b %-6s %s\n" "$i" "$now" "$want" "${LABEL[$c]}"
+        else
+            printf "  %b%-3s %-6s %-6s %s (not available)%b\n" "$c_dim" "$i" "$now" "$want" "${LABEL[$c]}" "$c_reset"
+        fi
     done
     echo
     echo -e "$KERNEL_OVERVIEW"
@@ -99,7 +114,11 @@ draw_menu_tui() {
         state="  (now: off)"; [[ "${CURRENT[$c]}" == 1 ]] && state="  (now: ${c_green}on${c_reset})"
         is_action "$c" && state="  (opt-in, runs once)"
         line="$box ${LABEL[$c]}"
-        if (( i == cursor )); then
+        if ! component_selectable "$c"; then
+            # Greyed out: nothing to do (e.g. BIOS already up to date).
+            local mark="   "; (( i == cursor )) && mark=" ${c_cyan}>${c_reset} "
+            echo -e "${mark}${c_dim}[ ] ${LABEL[$c]}  (not available)${c_reset}"
+        elif (( i == cursor )); then
             # The green x's reset would end the bold too: re-enable it after.
             echo -e " ${c_cyan}>${c_reset} ${c_bold}${line//"$c_reset"/"$c_reset$c_bold"}${c_reset}${state}"
         else
@@ -150,7 +169,8 @@ run_menu_lines() {
             q|Q) return 1 ;;
             *)
                 if [[ "$reply" =~ ^[0-9]+$ && -n "${MENU_ITEMS[$reply]:-}" ]]; then
-                    toggle_component "${MENU_ITEMS[$reply]}"
+                    toggle_component "${MENU_ITEMS[$reply]}" ||
+                        warn "Not available: ${LABEL[${MENU_ITEMS[$reply]}]}"
                 else
                     warn "Unknown choice: $reply"
                 fi
@@ -191,7 +211,7 @@ apply_changes() {
         "${c}_disable" || failed+=("$c")
     done
     for c in "${TO_ENABLE[@]}"; do
-        if is_action "$c"; then echo; echo -e "${c_bold}Running: ${LABEL[$c]}${c_reset}"
+        if is_action "$c"; then echo; echo -e "${c_bold}Running: ${LABEL[$c]%%:*}${c_reset}"
         else echo; echo -e "${c_bold}Turning on: ${LABEL[$c]}${c_reset}"; fi
         "${c}_enable" || failed+=("$c")
     done

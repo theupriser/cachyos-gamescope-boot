@@ -42,35 +42,71 @@ bios_lookup_newest() {
     [[ -n "$BIOS_NEWEST" ]]
 }
 
+bios_selectable() {
+    # Only when Valve has a newer BIOS than the one installed; the menu
+    # greys the item out otherwise (up to date, or newest unknown/offline).
+    [[ -n "${BIOS_NEWEST:-}" && "$BIOS_NEWEST" != "$(bios_current)" ]]
+}
+
 bios_label() {
     # Menu label with the current and the newest version.
     local newest="newest unknown (offline?)"
-    bios_lookup_newest && newest="newest $BIOS_NEWEST"
-    [[ "$BIOS_NEWEST" == "$(bios_current)" ]] && newest="up to date"
+    [[ -n "${BIOS_NEWEST:-}" ]] && newest="newest $BIOS_NEWEST"
+    [[ "${BIOS_NEWEST:-}" == "$(bios_current)" ]] && newest="up to date"
     echo "Update BIOS (at your own risk): now $(bios_current), $newest"
 }
 
+BIOS_BOX_WIDTH=68
+
+bios_box_line() {
+    # bios_box_line [text]: one line of the warning box, padded to the same
+    # visible width (colour codes don't count) so the right edge lines up.
+    local text="${1:-}" plain pad
+    plain="$(printf '%b' "$text" | sed 's/\x1b\[[0-9;]*m//g')"
+    pad=$(( BIOS_BOX_WIDTH - 6 - ${#plain} ))
+    (( pad < 0 )) && pad=0
+    printf '  %b██%b  %b%*s%b██%b\n' "$c_red" "$c_reset" "$text" "$pad" "" "$c_red" "$c_reset"
+}
+
+bios_box_border() {
+    # Block characters: Konsole draws a long coloured row of # narrower
+    # than the box's other lines, so its right edge wouldn't line up.
+    printf '  %b%s%b\n' "$c_red" "$(printf '█%.0s' $(seq "$BIOS_BOX_WIDTH"))" "$c_reset"
+}
+
 bios_disclaimer() {
-    local r="$c_red$c_bold" n="$c_reset"
+    # bios_disclaimer <title> [line...]: the warning box; extra lines are
+    # shown above the fixed risks.
+    local title="$1" line b="$c_bold" n="$c_reset"
+    shift
     echo
-    echo -e "${r}  ###################################################################${n}"
-    echo -e "${r}  ##                                                               ##${n}"
-    echo -e "${r}  ##    WARNING: BIOS UPDATE - ENTIRELY AT YOUR OWN RISK           ##${n}"
-    echo -e "${r}  ##                                                               ##${n}"
-    echo -e "${r}  ###################################################################${n}"
-    echo -e "${r}  ##${n}  $1"
-    echo -e "${r}  ##${n}"
-    echo -e "${r}  ##${n}  - A failed or interrupted BIOS update can leave the machine"
-    echo -e "${r}  ##${n}    unable to start (bricked). This wizard, CachyOS and Valve"
-    echo -e "${r}  ##${n}    take no responsibility for that."
-    echo -e "${r}  ##${n}  - ${c_bold}NEVER turn off the power, unplug the machine or press the${n}"
-    echo -e "${r}  ##${n}    ${c_bold}power button while the update runs${n}, including during the"
-    echo -e "${r}  ##${n}    restart(s) afterwards, when the firmware is actually written."
-    echo -e "${r}  ##${n}  - The screen can stay black for several minutes. Wait."
-    echo -e "${r}  ##${n}  - Use this only on a Valve Steam Machine, on mains power, and"
-    echo -e "${r}  ##${n}    close all other programs first."
-    echo -e "${r}  ###################################################################${n}"
+    bios_box_border
+    bios_box_line
+    bios_box_line "$c_red$b$title$n"
+    bios_box_line
+    bios_box_border
+    for line in "$@"; do bios_box_line "$line"; done
+    bios_box_line
+    bios_box_line "- A failed or interrupted BIOS update can leave the machine"
+    bios_box_line "  unable to start (bricked). This wizard, CachyOS and Valve"
+    bios_box_line "  take no responsibility for that."
+    bios_box_line "- ${b}NEVER turn off the power, unplug the machine or press${n}"
+    bios_box_line "  ${b}the power button while the update runs${n}, including the"
+    bios_box_line "  restart(s) afterwards, when the firmware is written."
+    bios_box_line "- The screen can stay black for several minutes. Wait."
+    bios_box_line "- Only on mains power, with all other programs closed."
+    bios_box_line
+    bios_box_border
     echo
+}
+
+bios_fits_device() {
+    # bios_fits_device <cab>: does fwupd match this firmware to a device in
+    # this machine? It compares the file's hardware IDs (GUIDs) with the
+    # hardware; for a file that doesn't fit it reports an UpdateError.
+    local details
+    details="$(sudo fwupdmgr get-details --json "$1" 2>/dev/null)" || return 1
+    grep -q '"Guid"' <<< "$details" && ! grep -q '"UpdateError"' <<< "$details"
 }
 
 bios_enable() {
@@ -78,32 +114,51 @@ bios_enable() {
         err "Couldn't find the newest Steam Machine BIOS on Valve's mirror ($VALVE_MIRROR)."
         return 1
     fi
-    local current
+    local current tmp
     current="$(bios_current)"
     if [[ "$current" == "$BIOS_NEWEST" ]]; then
         ok "The BIOS is already the newest version ($current); nothing to do."
         return 0
     fi
 
-    bios_disclaimer "Current BIOS: ${c_bold}$current${c_reset}   ->   new BIOS: ${c_bold}$BIOS_NEWEST${c_reset} ($BIOS_PKG)"
-    ask_yn "Do you understand the risks and want to continue?" n ||
-        { info "BIOS update cancelled; nothing was changed."; return 0; }
-    bios_disclaimer "LAST CHANCE: this flashes BIOS $BIOS_NEWEST onto this machine."
-    local reply
-    read -rp "$(echo -e "${c_red}${c_bold}Type UPDATE (in capitals) to flash the BIOS, anything else cancels:${c_reset} ")" reply
-    [[ "$reply" == UPDATE ]] || { info "BIOS update cancelled; nothing was changed."; return 0; }
-
+    # Download and check everything before asking: the warnings only come
+    # when the file is Valve's (SHA-256 from Valve's repo database) and fwupd
+    # confirms it's firmware for this very machine.
     pacman -Q fwupd >/dev/null 2>&1 || sudo pacman -S --needed --noconfirm fwupd ||
         { err "Installing fwupd failed."; return 1; }
-    local tmp
     tmp="$(mktemp -d)"
     info "Downloading $BIOS_PKG ($BIOS_REPO)..."
-    if ! curl -fL "$VALVE_MIRROR/$BIOS_REPO/os/x86_64/$BIOS_PKG" -o "$tmp/pkg.tar.zst" ||
+    if ! curl -fsSL "$VALVE_MIRROR/$BIOS_REPO/os/x86_64/$BIOS_PKG" -o "$tmp/pkg.tar.zst" ||
         ! echo "$BIOS_SHA256  $tmp/pkg.tar.zst" | sha256sum -c --quiet - ||
         ! tar -I unzstd -xf "$tmp/pkg.tar.zst" -C "$tmp" "$BIOS_CAB"; then
         err "Downloading or verifying $BIOS_PKG failed; the BIOS was not touched."
         rm -rf "$tmp"
         return 1
+    fi
+    ok "Checksum OK: this is Valve's $BIOS_PKG."
+    if ! bios_fits_device "$tmp/$BIOS_CAB"; then
+        err "fwupd says BIOS $BIOS_NEWEST is not for this machine's hardware; not installing it."
+        rm -rf "$tmp"
+        return 1
+    fi
+    ok "fwupd confirms BIOS $BIOS_NEWEST is firmware for this machine."
+
+    local g="$c_green$c_bold" b="$c_bold" n="$c_reset"
+    bios_disclaimer "WARNING: BIOS UPDATE - ENTIRELY AT YOUR OWN RISK" \
+        "Current BIOS: ${b}$current${n}" \
+        "New BIOS:     ${b}$BIOS_NEWEST${n}" \
+        "Checksum:     ${g}OK${n} (Valve's package)" \
+        "Compatible:   ${g}yes${n} (checked by fwupd)"
+    if ! ask_yn "Do you understand the risks and want to continue?" n; then
+        info "BIOS update cancelled; nothing was changed."; rm -rf "$tmp"; return 0
+    fi
+    bios_disclaimer "LAST CHANCE: THIS FLASHES BIOS $BIOS_NEWEST" \
+        "After this, keep the power on until the machine has fully" \
+        "started again. Don't touch it, even if the screen is black."
+    local reply
+    read -rp "$(echo -e "${c_red}${c_bold}Type UPDATE (in capitals) to flash the BIOS, anything else cancels:${c_reset} ")" reply
+    if [[ "$reply" != UPDATE ]]; then
+        info "BIOS update cancelled; nothing was changed."; rm -rf "$tmp"; return 0
     fi
 
     info "Handing BIOS $BIOS_NEWEST to fwupd. Do NOT turn off the power from now on."
