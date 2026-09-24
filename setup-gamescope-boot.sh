@@ -16,7 +16,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-for lib in common state packages login-manager single-user steam-desktop steam-machine vapor-theme desktop-shortcut menu; do
+for lib in common state packages login-manager single-user steam-desktop steam-machine vapor-theme steamos-extras desktop-shortcut menu; do
     # shellcheck source=/dev/null
     source "$SCRIPT_DIR/lib/$lib.sh"
 done

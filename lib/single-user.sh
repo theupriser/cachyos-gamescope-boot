@@ -9,12 +9,25 @@ single_status() {
     [[ "$(kreadconfig6 --file kdeglobals --group "KDE Action Restrictions" --key action/lock_screen)" == false ]]
 }
 
+single_launcher() {
+    # Launcher: only Sleep / Restart / Shut Down, no Session dropdown (where
+    # Log Out lives). Restricting action/logout instead would also hide
+    # Restart and Shut Down. Separate so the theme can re-apply it after
+    # replacing the Plasma layout. Edit only while plasmashell is stopped.
+    local applet grp
+    for applet in $(plasma_applets org.kde.plasma.kickoff); do
+        grp="Containments|${applet%%:*}|Applets|${applet#*:}|Configuration|General"
+        kset single plasma-org.kde.plasma.desktop-appletsrc "$grp" primaryActions 3
+        kset single plasma-org.kde.plasma.desktop-appletsrc "$grp" systemFavorites 'suspend,reboot,shutdown'
+    done
+}
+
 single_enable() {
     info "Turning off the lock screen, user switching and logging out..."
     stop_plasmashell_for_edit
 
     # Hides Lock / Switch User in menus.
-    local action applet
+    local action
     for action in lock_screen switch_user start_new_session; do
         kset single kdeglobals "KDE Action Restrictions" "action/$action" false
     done
@@ -26,14 +39,7 @@ single_enable() {
     # Ctrl+Alt+Del logout screen (format: current,default,description).
     kset single kglobalshortcutsrc ksmserver "Lock Session" $'none,Screensaver\tMeta+L,Lock Session'
     kset single kglobalshortcutsrc ksmserver "Log Out" 'none,Ctrl+Alt+Del,Show Logout Screen'
-    # Launcher: only Sleep / Restart / Shut Down, no Session dropdown (where
-    # Log Out lives). Restricting action/logout instead would also hide
-    # Restart and Shut Down.
-    for applet in $(plasma_applets org.kde.plasma.kickoff); do
-        local grp="Containments|${applet%%:*}|Applets|${applet#*:}|Configuration|General"
-        kset single plasma-org.kde.plasma.desktop-appletsrc "$grp" primaryActions 3
-        kset single plasma-org.kde.plasma.desktop-appletsrc "$grp" systemFavorites 'suspend,reboot,shutdown'
-    done
+    single_launcher
 
     restart_plasmashell_if_stopped
     ok "Single user: no lock screen, user switching or log out."
