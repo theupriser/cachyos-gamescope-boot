@@ -147,8 +147,10 @@ gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
   device check, never flashes) and a faked version (dev-env
   `BIOS_VERSION=F7F0107 ./run.sh --fremont`).
 - The entry point loops: menu, run, "back to the menu" (or `[m]`/`[r]` when a
-  restart is needed), until `q`; the restart question is asked once at the
-  end. Scripted input that runs out ends the loop like `q`.
+  restart is needed), until `q`. When a restart is needed, `q` asks "Restart
+  now? [Y/n]" (`quit_prompt`): `n` goes back to the menu, the next `q` asks
+  again. Scripted input that runs out quits without restarting (never
+  restart on EOF: `ask_yn` would take its default).
 - Steamify shortcut (`launcher`): the icon runs `curl | bash` of
   `releases/latest/download/steamify.sh` in Konsole, so it's
   always the newest release. Its icon, `assets/steam-gaming-settings.svg`

@@ -78,13 +78,36 @@ after_run() {
     done
 }
 
+quit_prompt() {
+    # On q: when something needs a restart, offer it (default yes); "n" goes
+    # back to the menu, and the next q asks again. Returns 0 to show the menu
+    # again, 1 to quit (nothing to restart, or input ended in scripted runs).
+    local reply
+    restart_needed || return 1
+    echo
+    if [[ -n "${BIOS_NEEDS_RESTART:-}" ]]; then
+        warn "The BIOS update is written during the next restart. Keep the power on and"
+        warn "don't touch the machine until it has fully started again, even if the screen stays black."
+    else
+        info "The changes take effect after a restart."
+    fi
+    read -rp "$(echo -e "${c_bold}Restart now?${c_reset} [Y/n] (n = back to the menu, Ctrl+C = quit without restarting) ")" reply || return 1
+    case "$reply" in
+        ""|y|Y) restart_now ;;
+    esac
+    return 0
+}
+
 # Menu loop: after each run the menu comes back with the new state, until
 # the user quits; the restart question comes then, once, for everything.
 RESTART_FOR_LOGIN=false
 SUDO_KEEPALIVE=false
 while true; do
     detect_components
-    run_menu || break
+    if ! run_menu; then
+        quit_prompt && continue
+        break
+    fi
     plan_changes
 
     if [[ ${#TO_DISABLE[@]} -eq 0 && ${#TO_ENABLE[@]} -eq 0 ]]; then
@@ -130,21 +153,9 @@ while true; do
 done
 echo
 
-# A staged BIOS update is written during the restart.
-if [[ -n "${BIOS_NEEDS_RESTART:-}" ]]; then
-    warn "The BIOS update is written during the next restart. Keep the power on and"
-    warn "don't touch the machine until it has fully started again, even if the screen stays black."
-    if ask_yn "Restart now to install the BIOS update?" n; then
-        restart_now
-    else
-        info "The BIOS update installs at your next restart."
-    fi
-elif [[ "$RESTART_FOR_LOGIN" == true ]]; then
-    if ask_yn "Restart now so the changes take effect?" n; then
-        restart_now
-    else
-        info "Restart whenever you're ready."
-    fi
+if restart_needed; then
+    # Only reached when input ended (scripted runs): never restart then.
+    info "Not restarted; the changes take effect after a restart."
 else
     info "Bye."
 fi

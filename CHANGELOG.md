@@ -7,11 +7,15 @@ one per merged pull request.
 
 ## 0.9.1 - 2026-09-24
 
-- **fix: LED driver for every kernel on a fresh install**
+- `2e107e5` **fix: LED driver for every kernel on a fresh install**
   - The DKMS override was written to `/etc/dkms` before `dkms` was installed,
     when that folder doesn't exist yet, so it silently failed and the build
     for other kernels (e.g. LTS) failed as in 0.6. The folder is created first
     now, and a failed write stops with an error.
+- **feat: Restart question on quit is "Restart now? [Y/n]"**
+  - When something needs a restart, `q` asks with yes as the default; `n` goes
+    back to the menu and the next `q` asks again. Ctrl+C quits without
+    restarting; scripted input that runs out never restarts.
 
 ## 0.9.0 - 2026-09-24 (#9)
 
