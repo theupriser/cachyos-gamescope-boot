@@ -51,7 +51,11 @@ Machine LED driver works on every installed kernel and survives kernel updates.
     get a warning when `VERSION` wasn't bumped).
   - Install with `.../releases/latest/download/setup-gamescope-boot.sh`, which
     always points to the newest release.
-- **docs: Versioning and release rules in AGENTS.md**
+- `1604ed1` **docs: Versioning and release rules in AGENTS.md**
+- **ci: The latest tag follows the newest version tag**
+  - When a new version is released, the `latest` tag and release move to it
+    (bundle replaced), so the older `.../releases/download/latest/...` URL
+    also always gives the newest version.
 
 ## 0.6.2 - 2026-09-23
 

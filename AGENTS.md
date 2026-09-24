@@ -70,9 +70,10 @@ gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
     changelog section) and marks it latest. An existing version is never
     overwritten: without a bump nothing is released, and pull requests show
     a warning.
-  - Users install through `releases/latest/download/setup-gamescope-boot.sh`,
-    which always resolves to the newest release. The old rolling `latest` tag
-    and release are from before 0.7.0 and are no longer updated.
+  - Users install through `releases/latest/download/setup-gamescope-boot.sh`
+    (GitHub's newest release). The `latest` tag and release follow the newest
+    version tag too (moved, asset replaced, when a new version is released),
+    so the older URL `releases/download/latest/...` keeps working.
 
 ## Non-obvious behaviour to preserve
 

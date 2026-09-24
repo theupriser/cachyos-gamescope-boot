@@ -335,7 +335,8 @@ gamescope-session, ...) stay installed.
 The single-file version is generated: on every push to `main`, GitHub
 Actions runs `.github/tools/bundle.sh`, checks the result with `bash -n` and
 shellcheck, and publishes it as a release per version (tag `v<VERSION>`,
-never overwritten; the newest is marked latest). It inlines
+never overwritten; the newest is marked latest, and the `latest` tag follows
+it). It inlines
 `lib/*.sh` and wraps the entry point in `main()`, so bash has read the whole
 file before anything runs; when stdin is a pipe (`curl | bash`) it reattaches
 the terminal for the menu (set `WIZARD_KEEP_STDIN=1` to keep piped input).
