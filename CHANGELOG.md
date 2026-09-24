@@ -8,7 +8,7 @@ one per merged pull request.
 ## 0.8.0 - 2026-09-24
 
 An opt-in BIOS update for the Steam Machine, and a menu that comes back after
-every run. Merged together with 0.7.0, so v0.8.0 is the release that has both.
+every run.
 
 - `2f9b2a5` **feat: Opt-in BIOS update for the Steam Machine**
   - New menu item (Steam Machine only, never ticked by default) showing the
@@ -40,9 +40,9 @@ every run. Merged together with 0.7.0, so v0.8.0 is the release that has both.
   - "now F7F0107, newest F7F0108 (own risk)", "F7F0108 waits for a restart",
     "F7F0107 is up to date"; shorter dry-run line.
 - `99a95ab` **fix: Kernel legend only mentions the LEDs on a Steam Machine**
-- **docs: Last commit hash in the changelog**
+- **docs: Last commit hash in the changelog; 0.7.0 was released on its own (#6, #7)**
 
-## 0.7.0 - 2026-09-24
+## 0.7.0 - 2026-09-24 (#6, #7)
 
 The SteamOS theme comes from CachyOS's `cachyos-vapor` package, applied with
 Vapor's own desktop layout, and gains the SteamOS desktop extras. The Steam
