@@ -5,13 +5,17 @@
 
 # Menu order. Components are turned on in this order and off in reverse;
 # gaming must come first (single user builds on it).
-COMPONENTS=(gaming theme glyphs single launcher machine bios)
+COMPONENTS=(gaming boot theme glyphs single launcher machine bios)
 # One-off actions rather than on/off components: never preselected, never
 # re-applied, not listed as on or off.
 ACTIONS=(bios)
+# Never preselected on a first run: booting into the desktop is a choice,
+# gamescope is the default.
+NO_PRESELECT=(boot)
 
 declare -A LABEL=(
     [gaming]="SteamOS conversion: boot into gaming mode, Steam on the desktop"
+    [boot]="Boot into the desktop instead of gaming mode"
     [theme]="Install SteamOS theme: Vapor look (cachyos-vapor)"
     [glyphs]="Install Steam Deck/Machine icons: Deck button icons in gaming mode"
     [single]="Single user mode: no password, lock screen or log out (SDDM)"
@@ -49,7 +53,8 @@ detect_components() {
     # First run: preselect the full SteamOS experience (never an action).
     if [[ "$any" == false ]]; then
         for c in "${COMPONENTS[@]}"; do
-            component_available "$c" && ! is_action "$c" && WANTED[$c]=1
+            component_available "$c" && ! is_action "$c" &&
+                [[ " ${NO_PRESELECT[*]} " != *" $c "* ]] && WANTED[$c]=1
         done
     fi
 }
@@ -60,7 +65,9 @@ toggle_component() {
     WANTED[$c]=$(( 1 - WANTED[$c] ))
     # Single user mode only makes sense on top of the SteamOS conversion.
     if [[ "$c" == single && "${WANTED[single]}" == 1 ]]; then WANTED[gaming]=1; fi
-    if [[ "$c" == gaming && "${WANTED[gaming]}" == 0 ]]; then WANTED[single]=0; fi
+    if [[ "$c" == gaming && "${WANTED[gaming]}" == 0 ]]; then WANTED[single]=0; WANTED[boot]=0; fi
+    # Where to boot to is part of the conversion, too.
+    if [[ "$c" == boot && "${WANTED[boot]}" == 1 ]]; then WANTED[gaming]=1; fi
 }
 
 show_menu() {
@@ -77,7 +84,13 @@ show_menu() {
         now="$(printf '%-6s' "$now")"
         [[ "${CURRENT[$c]}" == 1 ]] && now="${now/on/${c_green}on${c_reset}}"
         want="[ ]"; [[ "${WANTED[$c]}" == 1 ]] && want="[x]"
-        if component_selectable "$c"; then
+        if [[ "$c" == boot ]]; then
+            # A choice rather than a checkbox: Now/Want show the mode.
+            now="gaming"; [[ "${CURRENT[boot]}" == 1 ]] && now="desk"
+            [[ "${CURRENT[gaming]}" == 1 ]] || now="-"
+            want="gaming"; [[ "${WANTED[boot]}" == 1 ]] && want="desk"
+            printf "  %-3s %-6s %-6s %s\n" "$i" "$now" "$want" "$(boot_choice "${WANTED[boot]}")"
+        elif component_selectable "$c"; then
             printf "  %-3s %b %-6s %s\n" "$i" "$now" "$want" "${LABEL[$c]}"
         else
             printf "  %b%-3s %-6s %-6s %s (not available)%b\n" "$c_dim" "$i" "$now" "$want" "${LABEL[$c]}" "$c_reset"
@@ -115,6 +128,13 @@ draw_menu_tui() {
         state="  (now: off)"; [[ "${CURRENT[$c]}" == 1 ]] && state="  (now: ${c_green}on${c_reset})"
         is_action "$c" && state="  (opt-in, runs once)"
         line="$box ${LABEL[$c]}"
+        if [[ "$c" == boot ]]; then
+            # A choice rather than a checkbox; Space switches it.
+            line="$(boot_choice "${WANTED[boot]}")"
+            line="${line/\[/[${c_green}}"; line="${line/\]/${c_reset}]}"
+            state="  (now: gamescope)"; [[ "${CURRENT[boot]}" == 1 ]] && state="  (now: desktop)"
+            [[ "${CURRENT[gaming]}" == 1 ]] || state="  (with the SteamOS conversion)"
+        fi
         if ! component_selectable "$c"; then
             # Greyed out: nothing to do (e.g. BIOS already up to date).
             local mark="   "; (( i == cursor )) && mark=" ${c_cyan}>${c_reset} "

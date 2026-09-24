@@ -132,6 +132,14 @@ gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
   and `ensure-kernel-headers.service` installs missing ones at boot (a
   pacman hook can't run pacman), which triggers DKMS's install hook. The module creates
   `/sys/class/leds/valve-leds*`.
+- `boot` ("Boot into: [gamescope] / desktop") is a choice row, not a
+  checkbox: on = desktop. It needs `gaming` (ticking it ticks gaming,
+  unticking gaming unticks it) and is never preselected (`NO_PRESELECT`), so
+  the conversion boots into gamescope by default. Desktop is
+  `steamify-boot-desktop.service`, ordered `Before=` the login managers:
+  `steam-set-session plasma.desktop` plus the plasmalogin sync bridge when it
+  exists, at every boot. CachyOS's `cachyos-gamescope-autologin` still sets
+  gamescope during each desktop session; the unit corrects it at boot.
 - `bios` is an *action* (`ACTIONS` in `lib/menu.sh`), not an on/off
   component: never preselected (not even on a first run), never re-applied
   by `a`, not listed in the state overview, and `bios_status` is always off.

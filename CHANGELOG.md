@@ -5,14 +5,26 @@ All notable changes, per version and per commit. Versions follow
 `steamify.sh`. Versions before 0.7.0 were numbered afterwards,
 one per merged pull request.
 
-## 0.9.1 - 2026-09-24
+## 0.10.0 - 2026-09-24
+
+- **feat: Boot into gamescope or the desktop**
+  - New menu row under the conversion, "Boot into: [gamescope] / desktop";
+    gamescope stays the default and is never changed on a first run.
+  - Desktop: `steamify-boot-desktop.service` sets the autologin session to
+    Plasma at every boot, before the login manager starts; Return to Gaming
+    Mode and Steam's Switch to Desktop keep working. Back to gamescope removes
+    it. Choosing desktop turns the conversion on; turning the conversion off
+    resets it to gamescope.
+  - The later menu items move down one (BIOS is now 8 on a Steam Machine).
+
+## 0.9.1 - 2026-09-24 (#10)
 
 - `2e107e5` **fix: LED driver for every kernel on a fresh install**
   - The DKMS override was written to `/etc/dkms` before `dkms` was installed,
     when that folder doesn't exist yet, so it silently failed and the build
     for other kernels (e.g. LTS) failed as in 0.6. The folder is created first
     now, and a failed write stops with an error.
-- **feat: Restart question on quit is "Restart now? [Y/n]"**
+- `5ab83d6` **feat: Restart question on quit is "Restart now? [Y/n]"**
   - When something needs a restart, `q` asks with yes as the default; `n` goes
     back to the menu and the next `q` asks again. Ctrl+C quits without
     restarting; scripted input that runs out never restarts.

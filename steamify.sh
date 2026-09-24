@@ -15,11 +15,11 @@
 set -uo pipefail
 
 # Release version, see CHANGELOG.md.
-VERSION=0.9.1
+VERSION=0.10.0
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-for lib in common state packages login-manager single-user steam-desktop steam-machine vapor-theme steamos-extras bios desktop-shortcut wizard-shortcut menu; do
+for lib in common state packages login-manager single-user steam-desktop steam-machine boot-session vapor-theme steamos-extras bios desktop-shortcut wizard-shortcut menu; do
     # shellcheck source=/dev/null
     source "$SCRIPT_DIR/lib/$lib.sh"
 done
@@ -135,7 +135,7 @@ while true; do
 
     apply_changes
     # Login manager changes only take effect after a restart.
-    [[ " ${TO_DISABLE[*]} ${TO_ENABLE[*]} " == *" gaming "* || " ${TO_DISABLE[*]} ${TO_ENABLE[*]} " == *" single "* ]] &&
+    [[ " ${TO_DISABLE[*]} ${TO_ENABLE[*]} " =~ \ (gaming|single|boot)\  ]] &&
         RESTART_FOR_LOGIN=true
 
     echo

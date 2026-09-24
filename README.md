@@ -14,19 +14,22 @@ Everything you turn off is put back the way it was.
    Desktop** in Steam works and so does going back (the **Return to Gaming
    Mode** icon on the desktop), you're back in gaming mode after a restart,
    and Steam's on-screen keyboard (Steam + X) also works on the desktop.
-2. **SteamOS theme** - the Vapor look for the desktop (CachyOS's
+2. **Boot into: [gamescope] / desktop** - where the PC starts. Gamescope
+   (gaming mode) is the default; choose desktop to start in KDE Plasma
+   instead, with Return to Gaming Mode one double-click away. (Needs 1.)
+3. **SteamOS theme** - the Vapor look for the desktop (CachyOS's
    `cachyos-vapor` package).
-3. **Steam Deck/Machine icons** - Steam Deck button icons in gaming mode.
-4. **Single user mode** - like SteamOS: never a login or lock screen, no
+4. **Steam Deck/Machine icons** - Steam Deck button icons in gaming mode.
+5. **Single user mode** - like SteamOS: never a login or lock screen, no
    user switching or logging out. Typing a password with a controller is no
    fun. (Needs 1.)
-5. **Steamify shortcut** - a "Steamify CachyOS" icon on the desktop and in
+6. **Steamify shortcut** - a "Steamify CachyOS" icon on the desktop and in
    the app launcher (the Steam logo with a gear) that opens the newest version
    of Steamify in Konsole, so you don't need the install command again.
-6. **Steam Machine support** - only shown on a Valve Steam Machine: the
+7. **Steam Machine support** - only shown on a Valve Steam Machine: the
    driver for the front LED bar, and the hardware settings in Steam (fan,
    TV control over HDMI-CEC).
-7. **Update BIOS** - only on a Steam Machine, opt-in and at your own risk:
+8. **Update BIOS** - only on a Steam Machine, opt-in and at your own risk:
    installs the newest Steam Machine BIOS from Valve (see
    [BIOS updates](#bios-updates-steam-machine)).
 
@@ -97,9 +100,12 @@ files in `lib/` next to it.
   **Power > Switch to Desktop**.
 - **Back to gaming mode:** double-click **Return to Gaming Mode** on the
   desktop (or log out, if you're not using single user mode).
-- After a restart you always start in gaming mode.
+- After a restart you start in gaming mode, or on the desktop if you chose
+  **Boot into: desktop** in the menu. Switching back and forth works the same
+  either way.
 
-Prefer to decide yourself where your PC starts? Run one of these in Konsole:
+Prefer to start where you left off last time? Run one of these in Konsole
+(with **Boot into: gamescope**):
 
 ```bash
 steamos-session-select persistent  # start where you left off last time
@@ -356,6 +362,7 @@ gamescope-session, ...) stay installed.
 | `lib/state.sh` | Undo journal for KDE settings (`kset`/`krevert`) |
 | `lib/common.sh` | Output helpers, prompts, backups, plasmashell handling |
 | `lib/packages.sh` | Required packages, AUR helper (yay/paru) |
+| `lib/boot-session.sh` | Boot into gamescope or the desktop (`steamify-boot-desktop.service`) |
 | `lib/login-manager.sh` | SteamOS conversion: SDDM or plasmalogin autologin, sync bridge |
 | `lib/steam-desktop.sh` | Steam in the Plasma session; Steam Deck/Machine icons |
 | `lib/desktop-shortcut.sh` | Return to Gaming Mode shortcut and its sudoers rule |
