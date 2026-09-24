@@ -3,8 +3,8 @@
 # with that version's CHANGELOG.md section as notes. A released version is
 # never overwritten; the newest one is marked latest, and the "latest" tag and
 # release are moved to it, so both of these always get the newest version:
-#   curl -fsSL https://github.com/theupriser/cachyos-gamescope-boot/releases/latest/download/setup-gamescope-boot.sh | bash
-#   curl -fsSL https://github.com/theupriser/cachyos-gamescope-boot/releases/download/latest/setup-gamescope-boot.sh | bash
+#   curl -fsSL https://github.com/theupriser/steamify-cachyos/releases/latest/download/setup-gamescope-boot.sh | bash
+#   curl -fsSL https://github.com/theupriser/steamify-cachyos/releases/download/latest/setup-gamescope-boot.sh | bash
 # Pull requests only build and check it, and warn when VERSION is already released.
 name: Single-file build
 

@@ -4,7 +4,7 @@
 # install command in the README), so it's never out of date.
 # Sourced by setup-gamescope-boot.sh; not meant to be run on its own.
 
-WIZARD_RELEASE="https://github.com/theupriser/cachyos-gamescope-boot/releases/latest/download"
+WIZARD_RELEASE="https://github.com/theupriser/steamify-cachyos/releases/latest/download"
 WIZARD_URL="$WIZARD_RELEASE/setup-gamescope-boot.sh"
 # Steam logo with a gear (assets/ in the repo, published with every release).
 WIZARD_ICON="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps/cachyos-gamescope-boot-wizard.svg"

@@ -7,8 +7,7 @@ Steam Machine.
 
 Out of the box, CachyOS doesn't quite manage this: the switch to the desktop
 can hang, and the PC doesn't reliably boot back into gaming mode. Steamify
-fixes that and sets everything up for you. (The repository is still called
-`cachyos-gamescope-boot`.)
+fixes that and sets everything up for you.
 
 ## What you get
 
@@ -45,7 +44,7 @@ Everything you turn off is put back the way it was.
 Open **Konsole** on your Plasma desktop and run:
 
 ```bash
-curl -fsSL https://github.com/theupriser/cachyos-gamescope-boot/releases/latest/download/setup-gamescope-boot.sh | bash
+curl -fsSL https://github.com/theupriser/steamify-cachyos/releases/latest/download/setup-gamescope-boot.sh | bash
 ```
 
 That downloads and runs the latest single-file version, and works in any
@@ -53,8 +52,8 @@ shell, including fish (CachyOS's default). Prefer to keep a copy, or to look
 at the script first? Clone the repository instead:
 
 ```bash
-git clone https://github.com/theupriser/cachyos-gamescope-boot.git
-cd cachyos-gamescope-boot
+git clone https://github.com/theupriser/steamify-cachyos.git
+cd steamify-cachyos
 ./setup-gamescope-boot.sh
 ```
 

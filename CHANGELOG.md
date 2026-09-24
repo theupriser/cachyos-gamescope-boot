@@ -18,10 +18,15 @@ itself on the desktop.
     and downloaded from there.
   - Desktop files are written already executable, so Plasma runs them instead
     of opening them in an editor.
-- **feat: Rename to Steamify CachyOS**
+- `be874b8` **feat: Rename to Steamify CachyOS**
   - Menu header, the shortcut ("Steamify CachyOS", menu item "Steamify
-    shortcut"), release titles, README and AGENTS.md. The repository, script
-    and download URLs keep the name `cachyos-gamescope-boot`.
+    shortcut"), release titles, README and AGENTS.md.
+- **chore: Repository renamed to steamify-cachyos**
+  - All URLs point to `github.com/theupriser/steamify-cachyos` (the old ones
+    redirect). The script keeps its name, `setup-gamescope-boot.sh`, so the
+    old download URL keeps working; internal names such as
+    `~/.local/state/cachyos-gamescope-boot` stay, so existing installs can
+    still be turned off.
 
 ## 0.8.0 - 2026-09-24 (#8)
 

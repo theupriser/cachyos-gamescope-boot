@@ -5,7 +5,7 @@ for what the script does from a user's point of view.
 
 ## Project overview
 
-**Steamify CachyOS** (repository `cachyos-gamescope-boot`): a bash wizard that makes CachyOS (KDE Plasma 6 + `plasma-login-manager`)
+**Steamify CachyOS**: a bash wizard that makes CachyOS (KDE Plasma 6 + `plasma-login-manager`)
 boot into a SteamOS-style gamescope session, with working switching between
 gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
 (DMI `Valve`/`Fremont`) running CachyOS Desktop edition.
@@ -179,5 +179,5 @@ the wizard with scripted menu input such as `printf '2\n\ny\nn\n'`, the
 per-component checks; when stdin is not a terminal the menu falls back to a
 numbered prompt, which is what scripted runs use, reboot checks, the full test matrix, `--fremont` to
 fake Steam Machine hardware) live in
-[cachyos-gamescope-boot-dev-env](https://github.com/theupriser/cachyos-gamescope-boot-dev-env).
+[steamify-cachyos-dev](https://github.com/theupriser/steamify-cachyos-dev).
 Gamescope itself and the real LED bar can only be verified on hardware.
