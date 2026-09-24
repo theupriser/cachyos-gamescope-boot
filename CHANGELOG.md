@@ -31,7 +31,12 @@ itself on the desktop.
   - `setup-gamescope-boot.sh` is renamed to `steamify.sh`; releases publish the
     bundle under both names, so `.../download/setup-gamescope-boot.sh` keeps
     working. The Steamify shortcut runs `steamify.sh`.
-- **docs: Shorter README intro**
+- `b0553ae` **docs: Shorter README intro**
+- **feat: The shortcut's window closes itself after a countdown**
+  - After the wizard ends, a 10-second countdown closes the Konsole window
+    (Enter closes it right away); after an error it stays open until Enter.
+  - A failed download now counts as an error (`pipefail`) instead of running
+    an empty script.
 
 ## 0.8.0 - 2026-09-24 (#8)
 

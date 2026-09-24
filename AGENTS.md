@@ -156,6 +156,9 @@ gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
   downloaded from there (Steam's icon if that fails). Desktop files are
   written with their mode already set (`install_executable`): Plasma opens a
   desktop icon it first saw non-executable in an editor.
+  The start script closes its window after a 10-second countdown on success
+  and waits for Enter after an error; it uses `pipefail`, or a failed
+  download would run an empty script and count as success.
 - `Relogin=true` means a gamescope that fails to start is relaunched in a
   tight loop; keep that in mind when changing session handling.
 
