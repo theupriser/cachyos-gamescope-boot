@@ -14,6 +14,39 @@ detect_valve_fremont() {
         [[ "$vendor" == "OEM" && "$product" == "F7F" ]]
 }
 
+install_pinned_kernel() {
+    # Define URLs
+    local KERNEL_URL="https://archive.cachyos.org/archive/cachyos/linux-cachyos-7.1.6-1-x86_64.pkg.tar.zst"
+    local KERNEL_SIG_URL="https://archive.cachyos.org/archive/cachyos/linux-cachyos-7.1.6-1-x86_64.pkg.tar.zst.sig"
+    local HEADERS_URL="https://archive.cachyos.org/archive/cachyos/linux-cachyos-headers-7.1.6-1-x86_64.pkg.tar.zst"
+    local HEADERS_SIG_URL="https://archive.cachyos.org/archive/cachyos/linux-cachyos-headers-7.1.6-1-x86_64.pkg.tar.zst.sig"
+
+    # Extract filenames from URLs
+    local KERNEL_PKG=$(basename "$KERNEL_URL")
+    local KERNEL_SIG=$(basename "$KERNEL_SIG_URL")
+    local HEADERS_PKG=$(basename "$HEADERS_URL")
+    local HEADERS_SIG=$(basename "$HEADERS_SIG_URL")
+
+    info "Downloading CachyOS kernel packages and signatures..."
+    wget -c "$KERNEL_URL" "$KERNEL_SIG_URL" "$HEADERS_URL" "$HEADERS_SIG_URL" || { err "Failed to download kernel packages."; return 1; }
+
+    info "Verifying package signatures..."
+    if ! gpg --verify "$KERNEL_SIG" "$KERNEL_PKG" || ! gpg --verify "$HEADERS_SIG" "$HEADERS_PKG"; then
+        err "Signature verification failed!"
+        return 1
+    fi
+
+    info "Verification successful. Installing packages..."
+    sudo pacman -U --noconfirm "$KERNEL_PKG" "$HEADERS_PKG" || { err "Failed to install packages."; return 1; }
+
+    info "Locking the kernel packages to prevent updates..."
+    # This appends the kernel and headers to the IgnorePkg array in /etc/pacman.conf
+    sudo sed -i '/^#IgnorePkg/s/^#//' /etc/pacman.conf
+    sudo sed -i '/^IgnorePkg/ s/$/ linux-cachyos linux-cachyos-headers/' /etc/pacman.conf
+
+    ok "Installation complete and kernel successfully locked."
+}
+
 install_kernel_headers() {
     # DKMS can only build leds-valve against kernels whose headers are
     # installed. CachyOS ships several kernels (linux-cachyos, -lts, -bore,
@@ -201,6 +234,9 @@ machine_status() {
 }
 
 machine_enable() {
+    # Install and pin the specific CachyOS kernel first
+    install_pinned_kernel || { err "Custom kernel setup failed."; return 1; }
+    
     ensure_aur_helper || { warn "Couldn't set up an AUR helper automatically. Install yay or paru, then run the wizard again."; return 1; }
     install_valve_led_driver || { warn "LED driver setup ran into a problem - see errors above."; return 1; }
     install_headers_boot_check
@@ -237,6 +273,9 @@ EOF
 
 machine_disable() {
     info "Removing Steam Machine support..."
+    # Disables services, removes packages, and unpins the kernel
+    sudo sed -i '/^IgnorePkg/s/ linux-cachyos linux-cachyos-headers//' /etc/pacman.conf
+    sudo pacman -Syu --noconfirm linux-cachyos linux-cachyos-headers || { warn "Kernel upgrade issues."; }
     systemctl --user disable --now steamos-manager.service 2>/dev/null
     sudo systemctl disable --now steamos-manager.service 2>/dev/null
     sudo systemctl disable --now inputplumber.service 2>/dev/null
