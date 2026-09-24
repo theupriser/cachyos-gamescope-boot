@@ -27,6 +27,9 @@ Everything you turn off is put back the way it was.
 5. **Steam Machine support** - only shown on a Valve Steam Machine: the
    driver for the front LED bar, and the hardware settings in Steam (fan,
    TV control over HDMI-CEC).
+6. **Update BIOS** - only on a Steam Machine, opt-in and at your own risk:
+   installs the newest Steam Machine BIOS from Valve (see
+   [BIOS updates](#bios-updates-steam-machine)).
 
 ## Requirements
 
@@ -73,6 +76,10 @@ Steam Machine also whether the LED bar driver is built for it, and whether
 it's loaded right now, so a kernel update is easy to check. The wizard then
 shows what it will change, asks your password once, and at the end offers
 to restart (needed for changes to how the PC starts).
+
+After each run the menu comes back with the new state, so you can change more
+in one go; quit with **q**. When something needs a restart, you choose
+between going back to the menu and restarting now; quitting asks once more.
 
 Run it again whenever you like - to change your choices, to turn things off
 again, or after a CachyOS update (press `a` in the menu to re-apply
@@ -283,22 +290,41 @@ cat /var/lib/dkms/leds-valve-dkms/0.1/build/make.log
 journalctl --user -b | grep -i led
 ```
 
-**BIOS updates** (opt-in, never ticked by default). On a Steam Machine the menu
-has an **Update BIOS** item that shows the current BIOS version and the newest
-one Valve ships (`F7F0108.cab` in its `fremont-hw-support` package, looked up
-on Valve's SteamOS mirror). It can only be ticked when Valve has a newer BIOS
-than the one installed; otherwise it's greyed out. Before asking anything it
-downloads the package and checks it: the SHA-256 from Valve's repository
-proves it's Valve's file, and fwupd confirms the firmware is for this very
-machine (it compares the firmware's hardware IDs with the device). Only then
-it shows a large warning and asks for confirmation, shows the warning again
-and continues when you type `UPDATE`; the BIOS is written during the next restart.
+### BIOS updates (Steam Machine)
+
+The **Update BIOS** item is only shown on a Steam Machine and is never ticked
+by default. It shows the BIOS version you have now and the newest one Valve
+ships (the `.cab` file in its `fremont-hw-support` package, looked up on
+Valve's SteamOS mirror):
+
+```
+ [ ] Update BIOS (at your own risk): now F7F0107, newest F7F0108  (opt-in, runs once)
+```
+
+It can only be ticked when Valve has a newer BIOS than yours; when you're up
+to date, when the newest version can't be looked up (offline), or when an
+update is already waiting for a restart, it's greyed out.
+
+When you run it, the wizard:
+
+1. downloads Valve's package and checks its **SHA-256** against Valve's
+   repository, so it's exactly Valve's file;
+2. asks **fwupd** whether the firmware is for this very machine (fwupd compares
+   the firmware's hardware IDs with the device) and stops if it isn't;
+3. shows a large red **warning** with the current and the new version, and asks
+   whether you understand the risks (default: no);
+4. shows the warning **again** and only continues when you type `UPDATE`;
+5. hands the firmware to fwupd, which writes it during the **next restart**:
+   choose "restart now" or restart later yourself.
 
 **At your own risk:** a failed or interrupted BIOS update can leave the machine
 unable to start. Keep it on mains power, and never turn off the power, unplug
-it or press the power button while it updates, including during the restart
-afterwards; the screen can stay black for several minutes. fwupd refuses the
-file on anything that isn't a Steam Machine.
+it or press the power button while it updates, including during the restart;
+the screen can stay black for several minutes.
+
+To walk through it without flashing anything, run the wizard with
+`WIZARD_BIOS_DRY_RUN=1`: it downloads and checks the package and shows both
+warnings, skips fwupd's device check, and only prints the install command.
 
 ### Manual session control
 

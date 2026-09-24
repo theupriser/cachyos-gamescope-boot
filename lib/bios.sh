@@ -6,6 +6,10 @@
 # Sourced by setup-gamescope-boot.sh; not meant to be run on its own.
 
 BIOS_REPO_PREFIX=holo
+# WIZARD_BIOS_DRY_RUN=1 walks through the whole BIOS update (download,
+# checksum, both warnings) but never flashes: fwupd's device check is
+# skipped and the install is only printed. For testing, e.g. in a VM.
+BIOS_DRY_RUN="${WIZARD_BIOS_DRY_RUN:-}"
 
 bios_available() { detect_valve_fremont; }
 
@@ -45,7 +49,7 @@ bios_lookup_newest() {
 bios_selectable() {
     # Only when Valve has a newer BIOS than the one installed; the menu
     # greys the item out otherwise (up to date, or newest unknown/offline).
-    [[ -n "${BIOS_NEWEST:-}" && "$BIOS_NEWEST" != "$(bios_current)" ]]
+    [[ -z "${BIOS_NEEDS_RESTART:-}" && -n "${BIOS_NEWEST:-}" && "$BIOS_NEWEST" != "$(bios_current)" ]]
 }
 
 bios_label() {
@@ -53,6 +57,7 @@ bios_label() {
     local newest="newest unknown (offline?)"
     [[ -n "${BIOS_NEWEST:-}" ]] && newest="newest $BIOS_NEWEST"
     [[ "${BIOS_NEWEST:-}" == "$(bios_current)" ]] && newest="up to date"
+    [[ -n "${BIOS_NEEDS_RESTART:-}" ]] && newest="$BIOS_NEWEST staged, restart to install"
     echo "Update BIOS (at your own risk): now $(bios_current), $newest"
 }
 
@@ -114,8 +119,9 @@ bios_enable() {
         err "Couldn't find the newest Steam Machine BIOS on Valve's mirror ($VALVE_MIRROR)."
         return 1
     fi
-    local current tmp
+    local current tmp compatible
     current="$(bios_current)"
+    [[ -n "$BIOS_DRY_RUN" ]] && warn "DRY RUN (WIZARD_BIOS_DRY_RUN): nothing will be flashed."
     if [[ "$current" == "$BIOS_NEWEST" ]]; then
         ok "The BIOS is already the newest version ($current); nothing to do."
         return 0
@@ -136,19 +142,24 @@ bios_enable() {
         return 1
     fi
     ok "Checksum OK: this is Valve's $BIOS_PKG."
-    if ! bios_fits_device "$tmp/$BIOS_CAB"; then
+    local yes="$c_green$c_bold" b="$c_bold" n="$c_reset"
+    if [[ -n "$BIOS_DRY_RUN" ]]; then
+        warn "Dry run: skipping fwupd's check that the firmware fits this machine."
+        compatible="${c_yellow}${b}not checked${n} (dry run)"
+    elif bios_fits_device "$tmp/$BIOS_CAB"; then
+        ok "fwupd confirms BIOS $BIOS_NEWEST is firmware for this machine."
+        compatible="${yes}yes${n} (checked by fwupd)"
+    else
         err "fwupd says BIOS $BIOS_NEWEST is not for this machine's hardware; not installing it."
         rm -rf "$tmp"
         return 1
     fi
-    ok "fwupd confirms BIOS $BIOS_NEWEST is firmware for this machine."
 
-    local yes="$c_green$c_bold" b="$c_bold" n="$c_reset"
     bios_disclaimer "WARNING: BIOS UPDATE - ENTIRELY AT YOUR OWN RISK" \
         "Current BIOS: ${b}$current${n}" \
         "New BIOS:     ${b}$BIOS_NEWEST${n}" \
         "Checksum:     ${yes}OK${n} (Valve's package)" \
-        "Compatible:   ${yes}yes${n} (checked by fwupd)"
+        "Compatible:   $compatible"
     if ! ask_yn "Do you understand the risks and want to continue?" n; then
         info "BIOS update cancelled; nothing was changed."; rm -rf "$tmp"; return 0
     fi
@@ -161,6 +172,12 @@ bios_enable() {
         info "BIOS update cancelled; nothing was changed."; rm -rf "$tmp"; return 0
     fi
 
+    if [[ -n "$BIOS_DRY_RUN" ]]; then
+        ok "Dry run: would now run: sudo fwupdmgr install -y --no-reboot-check $BIOS_CAB"
+        ok "Dry run finished; nothing was flashed and no restart is needed."
+        rm -rf "$tmp"
+        return 0
+    fi
     info "Handing BIOS $BIOS_NEWEST to fwupd. Do NOT turn off the power from now on."
     # -y: we already asked twice; --no-reboot-check: the wizard's own
     # restart question comes at the end.

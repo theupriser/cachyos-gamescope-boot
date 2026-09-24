@@ -5,6 +5,35 @@ All notable changes, per version and per commit. Versions follow
 `setup-gamescope-boot.sh`. Versions before 0.7.0 were numbered afterwards,
 one per merged pull request.
 
+## 0.8.0 - 2026-09-24
+
+An opt-in BIOS update for the Steam Machine, and a menu that comes back after
+every run. Merged together with 0.7.0, so v0.8.0 is the release that has both.
+
+- `2f9b2a5` **feat: Opt-in BIOS update for the Steam Machine**
+  - New menu item (Steam Machine only, never ticked by default) showing the
+    current BIOS version and the newest from Valve's `fremont-hw-support`.
+  - Two large warnings and two confirmations (y/N, then typing `UPDATE`),
+    checksum-verified download, installed with fwupd; the wizard then offers
+    the restart that writes it, with a warning to keep the power on.
+- `40c9ee6` **fix: BIOS update only when newer, device check first, aligned warnings**
+  - The item is greyed out and can't be ticked unless Valve has a newer BIOS.
+  - Before any warning: SHA-256 of Valve's package, then fwupd confirms the
+    firmware fits this machine's hardware; otherwise it stops.
+  - Warning box drawn with a solid red frame whose edges line up, and the
+    menu's "Now" column aligned.
+- `b70c9d6` **fix: shellcheck in the bundle, and the docs for the BIOS checks**
+  - A variable name in `lib/bios.sh` clashed with `lib/state.sh` in the bundle
+    (CI's shellcheck would fail); README, AGENTS.md and this changelog updated.
+- **feat: Menu comes back after each run, BIOS dry run, version 0.8.0**
+  - After a run the menu returns with the new state; quit with `q`. When
+    something needs a restart, choose between back to the menu (`m`) and
+    restart now (`r`); quitting asks once more.
+  - A staged BIOS update greys the item out until the restart.
+  - `WIZARD_BIOS_DRY_RUN=1` walks through the whole BIOS update (download,
+    checksum, both warnings) but only prints the install and never flashes.
+  - README: the menu loop and the BIOS update step by step.
+
 ## 0.7.0 - 2026-09-24
 
 The SteamOS theme comes from CachyOS's `cachyos-vapor` package, applied with
@@ -56,21 +85,6 @@ Machine LED driver works on every installed kernel and survives kernel updates.
   - When a new version is released, the `latest` tag and release move to it
     (bundle replaced), so the older `.../releases/download/latest/...` URL
     also always gives the newest version.
-- `2f9b2a5` **feat: Opt-in BIOS update for the Steam Machine**
-  - New menu item (Steam Machine only, never ticked by default) showing the
-    current BIOS version and the newest from Valve's `fremont-hw-support`.
-  - Two large warnings and two confirmations (y/N, then typing `UPDATE`),
-    checksum-verified download, installed with fwupd; the wizard then offers
-    the restart that writes it, with a warning to keep the power on.
-- `40c9ee6` **fix: BIOS update only when newer, device check first, aligned warnings**
-  - The item is greyed out and can't be ticked unless Valve has a newer BIOS.
-  - Before any warning: SHA-256 of Valve's package, then fwupd confirms the
-    firmware fits this machine's hardware; otherwise it stops.
-  - Warning box drawn with a solid red frame whose edges line up, and the
-    menu's "Now" column aligned.
-- **fix: shellcheck in the bundle, and the docs for the BIOS checks**
-  - A variable name in `lib/bios.sh` clashed with `lib/state.sh` in the bundle
-    (CI's shellcheck would fail); README, AGENTS.md and this changelog updated.
 
 ## 0.6.2 - 2026-09-23
 

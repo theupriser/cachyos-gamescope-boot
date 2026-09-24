@@ -143,7 +143,12 @@ gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
   Keep both confirmations (y/N, then typing `UPDATE`) and the warnings; the
   firmware comes from the newest `holo-X.Y` repo (`.files` db names the
   `.cab`, `.db` gives the SHA-256), and fwupd itself refuses non-Fremont
-  hardware. It can only be tested up to fwupd's refusal in the VM.
+  hardware. In the VM, test it with `WIZARD_BIOS_DRY_RUN=1` (skips only the
+  device check, never flashes) and a faked version (dev-env
+  `BIOS_VERSION=F7F0107 ./run.sh --fremont`).
+- The entry point loops: menu, run, "back to the menu" (or `[m]`/`[r]` when a
+  restart is needed), until `q`; the restart question is asked once at the
+  end. Scripted input that runs out ends the loop like `q`.
 - `Relogin=true` means a gamescope that fails to start is relaunched in a
   tight loop; keep that in mind when changing session handling.
 
