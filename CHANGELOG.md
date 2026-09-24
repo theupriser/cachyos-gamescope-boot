@@ -5,7 +5,15 @@ All notable changes, per version and per commit. Versions follow
 `steamify.sh`. Versions before 0.7.0 were numbered afterwards,
 one per merged pull request.
 
-## 0.9.0 - 2026-09-24
+## 0.9.1 - 2026-09-24
+
+- **fix: LED driver for every kernel on a fresh install**
+  - The DKMS override was written to `/etc/dkms` before `dkms` was installed,
+    when that folder doesn't exist yet, so it silently failed and the build
+    for other kernels (e.g. LTS) failed as in 0.6. The folder is created first
+    now, and a failed write stops with an error.
+
+## 0.9.0 - 2026-09-24 (#9)
 
 The wizard is now called **Steamify CachyOS**, and can put a shortcut to
 itself on the desktop.
@@ -32,7 +40,7 @@ itself on the desktop.
     bundle under both names, so `.../download/setup-gamescope-boot.sh` keeps
     working. The Steamify shortcut runs `steamify.sh`.
 - `b0553ae` **docs: Shorter README intro**
-- **feat: The shortcut's window closes itself after a countdown**
+- `afc05b0` **feat: The shortcut's window closes itself after a countdown**
   - After the wizard ends, a 10-second countdown closes the Konsole window
     (Enter closes it right away); after an error it stays open until Enter.
   - A failed download now counts as an error (`pipefail`) instead of running
