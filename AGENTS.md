@@ -59,9 +59,20 @@ gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
 - Comments explain *why* (the CachyOS/Plasma quirk being worked around),
   not what the next line does.
 
-- **Versioning.** SemVer in `VERSION` (`setup-gamescope-boot.sh`, shown in
-  the menu header and the bundle). Every commit gets an entry in
-  `CHANGELOG.md` under its version; a new PR/branch bumps the version.
+- **Versioning and releases.** SemVer in `VERSION` (`setup-gamescope-boot.sh`,
+  shown in the menu header and the bundle header).
+  - Every commit gets an entry in `CHANGELOG.md` under its version (short hash
+    + subject; a commit can't contain its own hash, so fill it in with the
+    next commit). The section heading must be `## <VERSION> - <date>`: CI
+    cuts the release notes out of the changelog by that heading.
+  - Every PR that should be released bumps `VERSION` and adds its section.
+    A push to `main` publishes release `v$VERSION` (tag + bundle + that
+    changelog section) and marks it latest. An existing version is never
+    overwritten: without a bump nothing is released, and pull requests show
+    a warning.
+  - Users install through `releases/latest/download/setup-gamescope-boot.sh`,
+    which always resolves to the newest release. The old rolling `latest` tag
+    and release are from before 0.7.0 and are no longer updated.
 
 ## Non-obvious behaviour to preserve
 
