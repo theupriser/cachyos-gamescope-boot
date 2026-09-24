@@ -133,7 +133,9 @@ gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
   pacman hook can't run pacman), which triggers DKMS's install hook. The module creates
   `/sys/class/leds/valve-leds*`.
 - `boot` ("Boot into: [gamescope] / desktop") is a choice row, not a
-  checkbox: on = desktop. It needs `gaming` (ticking it ticks gaming,
+  checkbox: on = desktop. It's a sub-option of the conversion: `menu_visible`
+  only shows it (indented, `└`) while `gaming` is ticked, so menu numbers
+  after it shift by one when the conversion is unticked. It needs `gaming` (ticking it ticks gaming,
   unticking gaming unticks it) and is never preselected (`NO_PRESELECT`), so
   the conversion boots into gamescope by default. Desktop is
   `steamify-boot-desktop.service`, ordered `Before=` the login managers:

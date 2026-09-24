@@ -7,7 +7,7 @@ one per merged pull request.
 
 ## 0.10.0 - 2026-09-24
 
-- **feat: Boot into gamescope or the desktop**
+- `0f503dd` **feat: Boot into gamescope or the desktop**
   - New menu row under the conversion, "Boot into: [gamescope] / desktop";
     gamescope stays the default and is never changed on a first run.
   - Desktop: `steamify-boot-desktop.service` sets the autologin session to
@@ -16,6 +16,8 @@ one per merged pull request.
     it. Choosing desktop turns the conversion on; turning the conversion off
     resets it to gamescope.
   - The later menu items move down one (BIOS is now 8 on a Steam Machine).
+- **feat: "Boot into" is a sub-option of the conversion**
+  - Shown indented under the SteamOS conversion, and only while it's ticked.
 
 ## 0.9.1 - 2026-09-24 (#10)
 

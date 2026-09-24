@@ -34,6 +34,13 @@ component_available() {
 
 is_action() { [[ " ${ACTIONS[*]} " == *" $1 "* ]]; }
 
+menu_visible() {
+    # Shown in the menu. "Boot into" is a sub-option of the conversion: only
+    # while the conversion is ticked.
+    component_available "$1" || return 1
+    [[ "$1" != boot || "${WANTED[gaming]:-0}" == 1 ]]
+}
+
 component_selectable() {
     # Greyed out and not tickable when it has nothing to do.
     case "$1" in
@@ -76,7 +83,7 @@ show_menu() {
     printf "  ${c_bold}%-3s %-6s %-6s %s${c_reset}\n" "#" "Now" "Want" "Component"
     MENU_ITEMS=()
     for c in "${COMPONENTS[@]}"; do
-        component_available "$c" || continue
+        menu_visible "$c" || continue
         i=$((i + 1)); MENU_ITEMS[$i]=$c
         # Pad the plain word, then colour it: colour codes would count as width.
         now="off"; [[ "${CURRENT[$c]}" == 1 ]] && now="on"
@@ -89,7 +96,7 @@ show_menu() {
             now="gaming"; [[ "${CURRENT[boot]}" == 1 ]] && now="desk"
             [[ "${CURRENT[gaming]}" == 1 ]] || now="-"
             want="gaming"; [[ "${WANTED[boot]}" == 1 ]] && want="desk"
-            printf "  %-3s %-6s %-6s %s\n" "$i" "$now" "$want" "$(boot_choice "${WANTED[boot]}")"
+            printf "  %-3s %-6s %-6s   └ %s\n" "$i" "$now" "$want" "$(boot_choice "${WANTED[boot]}")"
         elif component_selectable "$c"; then
             printf "  %-3s %b %-6s %s\n" "$i" "$now" "$want" "${LABEL[$c]}"
         else
@@ -122,7 +129,7 @@ draw_menu_tui() {
     echo
     MENU_ITEMS=()
     for c in "${COMPONENTS[@]}"; do
-        component_available "$c" || continue
+        menu_visible "$c" || continue
         MENU_ITEMS[$i]=$c
         box="[ ]"; [[ "${WANTED[$c]}" == 1 ]] && box="[${c_green}x${c_reset}]"
         state="  (now: off)"; [[ "${CURRENT[$c]}" == 1 ]] && state="  (now: ${c_green}on${c_reset})"
@@ -130,10 +137,11 @@ draw_menu_tui() {
         line="$box ${LABEL[$c]}"
         if [[ "$c" == boot ]]; then
             # A choice rather than a checkbox; Space switches it.
+            # Indented under the conversion, whose sub-option it is.
             line="$(boot_choice "${WANTED[boot]}")"
-            line="${line/\[/[${c_green}}"; line="${line/\]/${c_reset}]}"
+            line="    └ ${line/\[/[${c_green}}"; line="${line/\]/${c_reset}]}"
             state="  (now: gamescope)"; [[ "${CURRENT[boot]}" == 1 ]] && state="  (now: desktop)"
-            [[ "${CURRENT[gaming]}" == 1 ]] || state="  (with the SteamOS conversion)"
+            [[ "${CURRENT[gaming]}" == 1 ]] || state=""
         fi
         if ! component_selectable "$c"; then
             # Greyed out: nothing to do (e.g. BIOS already up to date).
@@ -160,6 +168,8 @@ run_menu_tui() {
     while true; do
         draw_menu_tui "$cursor"
         count=${#MENU_ITEMS[@]}
+        # The list shrinks when the conversion (and its sub-option) is unticked.
+        if (( cursor >= count )); then cursor=$(( count - 1 )); draw_menu_tui "$cursor"; fi
         IFS= read -rsn1 key
         if [[ "$key" == $'\e' ]]; then
             IFS= read -rsn2 -t 0.05 rest

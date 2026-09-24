@@ -14,9 +14,10 @@ Everything you turn off is put back the way it was.
    Desktop** in Steam works and so does going back (the **Return to Gaming
    Mode** icon on the desktop), you're back in gaming mode after a restart,
    and Steam's on-screen keyboard (Steam + X) also works on the desktop.
-2. **Boot into: [gamescope] / desktop** - where the PC starts. Gamescope
-   (gaming mode) is the default; choose desktop to start in KDE Plasma
-   instead, with Return to Gaming Mode one double-click away. (Needs 1.)
+2. **Boot into: [gamescope] / desktop** - a sub-option of 1, shown under it
+   while it's ticked: where the PC starts. Gamescope (gaming mode) is the
+   default; choose desktop to start in KDE Plasma instead, with Return to
+   Gaming Mode one double-click away.
 3. **SteamOS theme** - the Vapor look for the desktop (CachyOS's
    `cachyos-vapor` package).
 4. **Steam Deck/Machine icons** - Steam Deck button icons in gaming mode.
