@@ -9,7 +9,7 @@ COMPONENTS=(gaming theme glyphs single machine)
 
 declare -A LABEL=(
     [gaming]="SteamOS conversion: boot into gaming mode, Steam on the desktop"
-    [theme]="Install SteamOS theme: Vapor look, dark mode, SteamOS taskbar"
+    [theme]="Install SteamOS theme: Vapor look (cachyos-vapor)"
     [glyphs]="Install Steam Deck/Machine icons: Deck button icons in gaming mode"
     [single]="Single user mode: no password, lock screen or log out (SDDM)"
     [machine]="Steam Machine support: LED bar driver, hardware settings in Steam"
@@ -56,12 +56,16 @@ show_menu() {
         printf "  %-3s %-6b %-6s %s\n" "$i" "$now  " "$want" "${LABEL[$c]}"
     done
     echo
+    echo -e "$KERNEL_OVERVIEW"
+    echo
 }
 
 run_menu() {
     # Sets REAPPLY. Returns 1 if the user quit. A checkbox list on a
     # terminal; a plain numbered prompt when input is piped (scripted runs).
     REAPPLY=false
+    # Built once: the TUI redraws on every key press.
+    KERNEL_OVERVIEW="$(kernel_overview)"
     if [[ -t 0 && -t 1 ]]; then
         run_menu_tui
     else
@@ -72,7 +76,7 @@ run_menu() {
 draw_menu_tui() {
     local cursor="$1" i=0 c box state line
     printf '\033[H\033[2J'
-    echo -e "${c_bold}CachyOS Steam Deck-style Gamescope Boot Wizard${c_reset}"
+    echo -e "${c_bold}CachyOS Steam Deck-style Gamescope Boot Wizard${c_reset} v$VERSION"
     echo "Pick what you want. Anything you untick is put back the way it was."
     echo
     MENU_ITEMS=()
@@ -83,12 +87,15 @@ draw_menu_tui() {
         state="off"; [[ "${CURRENT[$c]}" == 1 ]] && state="${c_green}on${c_reset}"
         line="$box ${LABEL[$c]}"
         if (( i == cursor )); then
-            echo -e " ${c_cyan}>${c_reset} ${c_bold}${line}${c_reset}  (now: ${state})"
+            # The green x's reset would end the bold too: re-enable it after.
+            echo -e " ${c_cyan}>${c_reset} ${c_bold}${line//"$c_reset"/"$c_reset$c_bold"}${c_reset}  (now: ${state})"
         else
             echo -e "   ${line}  (now: ${state})"
         fi
         i=$((i + 1))
     done
+    echo
+    echo -e "$KERNEL_OVERVIEW"
     echo
     echo -e "  ${c_bold}Up/Down${c_reset} move   ${c_bold}Space${c_reset} select   ${c_bold}Enter${c_reset} run   ${c_bold}a${c_reset} run + re-apply what's on   ${c_bold}q${c_reset} quit"
 }

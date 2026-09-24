@@ -14,16 +14,19 @@
 
 set -uo pipefail
 
+# Release version, see CHANGELOG.md.
+VERSION=0.7.0
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-for lib in common state packages login-manager single-user steam-desktop steam-machine vapor-theme desktop-shortcut menu; do
+for lib in common state packages login-manager single-user steam-desktop steam-machine vapor-theme steamos-extras desktop-shortcut menu; do
     # shellcheck source=/dev/null
     source "$SCRIPT_DIR/lib/$lib.sh"
 done
 
 require_root_helper
 
-echo -e "${c_bold}CachyOS Steam Deck-style Gamescope Boot Wizard${c_reset}"
+echo -e "${c_bold}CachyOS Steam Deck-style Gamescope Boot Wizard${c_reset} v$VERSION"
 echo "Turn the SteamOS-style parts on or off. The menu shows what is on now;"
 echo "anything you turn off is put back the way it was."
 

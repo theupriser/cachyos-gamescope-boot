@@ -18,8 +18,8 @@ Everything you turn off is put back the way it was.
    Desktop** in Steam works and so does going back (the **Return to Gaming
    Mode** icon on the desktop), you're back in gaming mode after a restart,
    and Steam's on-screen keyboard (Steam + X) also works on the desktop.
-2. **SteamOS theme** - Valve's own Vapor look for the desktop: wallpaper,
-   dark mode and the SteamOS taskbar.
+2. **SteamOS theme** - the Vapor look for the desktop (CachyOS's
+   `cachyos-vapor` package).
 3. **Steam Deck/Machine icons** - Steam Deck button icons in gaming mode.
 4. **Single user mode** - like SteamOS: never a login or lock screen, no
    user switching or logging out. Typing a password with a controller is no
@@ -55,15 +55,22 @@ Run it as yourself, not as root. You'll see a checklist:
 
 ```
    [x] SteamOS conversion: boot into gaming mode, Steam on the desktop  (now: off)
- > [x] Install SteamOS theme: Vapor look, dark mode, SteamOS taskbar  (now: off)
+ > [x] Install SteamOS theme: Vapor look (cachyos-vapor)  (now: off)
    [x] Install Steam Deck/Machine icons: Deck button icons in gaming mode  (now: off)
    [x] Single user mode: no password, lock screen or log out (SDDM)  (now: off)
+
+  Kernels (> = running; controller = Steam controller driver, LEDs = LED bar driver built)
+    6.18.52-1-cachyos-lts   linux-cachyos-lts  headers yes  controller yes
+  > 7.2.7-1-cachyos         linux-cachyos      headers yes  controller yes
 
   Up/Down move   Space select   Enter run   a run + re-apply what's on   q quit
 ```
 
 Move with the **arrow keys**, tick or untick with **Space**, and press
-**Enter** to run. "now:" shows what's on at the moment. The wizard then
+**Enter** to run. "now:" shows what's on at the moment. Below the list, every
+installed kernel is shown with its headers and Steam controller driver; on a
+Steam Machine also whether the LED bar driver is built for it, and whether
+it's loaded right now, so a kernel update is easy to check. The wizard then
 shows what it will change, asks your password once, and at the end offers
 to restart (needed for changes to how the PC starts).
 
@@ -213,35 +220,29 @@ file), which makes Steam show Steam Deck button glyphs in gaming mode.
 
 ### SteamOS desktop look
 
-Downloads Valve's official `steamdeck-kde-presets` package from Valve's
-SteamOS mirror and installs it into `~/.local/share` - nothing system-wide:
+Installs CachyOS's `cachyos-vapor` package (the SteamOS Vapor theme the
+CachyOS handheld edition uses) from the CachyOS repository and switches your
+desktop to its Vapor global theme, including its desktop and window layout
+(like ticking "Desktop and window layout" in System Settings): Vapor colors
+and Plasma style, the SteamOS panel and launcher icon, and the Steam Deck
+wallpaper. Run it from the Plasma desktop: applying the layout needs a
+running Plasma session.
 
-- the Vapor global theme, color scheme, Plasma style, wallpapers and icons;
-- the Vapor GTK theme, Konsole profile and user avatars;
-- Valve's SteamOS desktop defaults, merged into your own config: Noto Sans
-  fonts, no Xwayland input-permission prompt for Steam Input, the window
-  rule that keeps the Steam keyboard on top and out of the taskbar, no
-  welcome screen, light file indexing;
-- the SteamOS panel: solid (not floating), full width, 44 px high, tray icons
-  scaled to fit, date below the time, and the SteamOS launcher icon;
-- dark mode for GTK, libadwaita and portal-aware apps (Firefox, Flatpaks).
+It also adds the SteamOS desktop extras that `cachyos-vapor` doesn't ship,
+taken from the newest `steamdeck-kde-presets` on Valve's SteamOS mirror
+(checksum verified) and installed to `/usr/local`:
 
-Run inside a Plasma session, it applies everything live; otherwise it takes
-effect at the next desktop login.
+- **Add to Steam** in the right-click menu of apps, AppImages and `.exe`
+  files, and in the launcher: adds them to Steam as non-Steam games;
+- **Nested Desktop**: add it to Steam from the launcher, then start it in
+  gaming mode for a Plasma desktop inside gaming mode;
+- the SteamOS **Return to Gaming Mode** icon (Steam logo with a return arrow);
+- a window rule that keeps the **Steam keyboard** above other windows;
+- an empty, password-less **KWallet**, only if you don't have a wallet yet,
+  so nothing asks for a wallet password after autologin.
 
-**Package version.** The script always takes the newest
-`steamdeck-kde-presets` from the highest-numbered SteamOS release repository
-on the mirror (`jupiter-3.9`, `jupiter-3.10`, ...). That repository's pacman
-database gives the exact file name and SHA-256 checksum, which is verified
-after downloading. If the lookup fails, it falls back to the known-good
-3.9.4 (see `install_vapor_theme()` in `lib/vapor-theme.sh`). To check the
-current version yourself:
-
-```bash
-m=https://steamdeck-packages.steamos.cloud/archlinux-mirror
-r=$(curl -fsL $m/ | grep -oE 'jupiter-[0-9]+\.[0-9]+/' | tr -d / | sort -V | tail -n 1)
-curl -fsL $m/$r/os/x86_64/$r.db | bsdtar -tf - | grep -o '^steamdeck-kde-presets-[^/]*' | sort -u
-```
+Turning it off restores your previous look and panel layout, and removes `cachyos-vapor` again
+if the wizard installed it (and nothing else, like `cachyos-handheld`, needs it).
 
 ### Front LED bar (Steam Machine)
 
@@ -251,10 +252,12 @@ The **Steam Machine support** component, only shown on Fremont hardware
 - installs an AUR helper (`yay`) if neither `yay` nor `paru` is present;
 - installs the kernel headers for every installed kernel;
 - installs `leds-valve-dkms-git` from the AUR - Valve's own driver from the
-  SteamOS kernel - builds it for the running kernel, and loads it at every
-  boot (`/etc/modules-load.d/leds-valve.conf`);
+  SteamOS kernel - builds it for every installed kernel (so the LTS kernel
+  works too), and loads it at every boot (`/etc/modules-load.d/leds-valve.conf`);
 - adds a udev rule (`/etc/udev/rules.d/70-valve-leds-user.rules`) that gives
   your user the LED files, so Steam, which runs as you, can drive the bar;
+- console-like power button: it puts the machine to sleep, and it never
+  suspends by itself on mains power (the launcher's Shut Down still shuts down);
 - installs and enables `steamos-manager`, the service Steam in gaming mode
   uses for hardware settings (fan, HDMI-CEC, performance); it recognises the
   Steam Machine from its DMI data.
@@ -262,9 +265,13 @@ The **Steam Machine support** component, only shown on Fremont hardware
 Turning it off removes all of that again (the AUR helper is kept).
 
 The LEDs appear as `/sys/class/leds/valve-leds*`. The driver's Makefile
-builds against the running kernel, so after a kernel update, boot the new
-kernel and re-apply (`a` in the menu) or run
-`sudo dkms install leds-valve-dkms/0.1 -k "$(uname -r)"`.
+builds against the running kernel (`uname -r`) instead of the kernel DKMS
+builds for, so the wizard adds a DKMS override
+(`/etc/dkms/leds-valve-dkms.conf`) that passes DKMS's target kernel in. With
+it, DKMS rebuilds the driver whenever a kernel or its headers are installed
+or upgraded. A newly added kernel doesn't come with its headers, so
+`ensure-kernel-headers.service` checks at every boot and installs any
+missing `-headers` package, which makes DKMS build the driver for it.
 
 Troubleshooting:
 
@@ -318,14 +325,15 @@ gamescope-session, ...) stay installed.
 | `lib/login-manager.sh` | SteamOS conversion: SDDM or plasmalogin autologin, sync bridge |
 | `lib/steam-desktop.sh` | Steam in the Plasma session; Steam Deck/Machine icons |
 | `lib/desktop-shortcut.sh` | Return to Gaming Mode shortcut and its sudoers rule |
-| `lib/vapor-theme.sh` | SteamOS theme: Vapor, Valve's defaults, panel, dark mode |
+| `lib/vapor-theme.sh` | SteamOS theme: installs and switches to `cachyos-vapor` |
+| `lib/steamos-extras.sh` | SteamOS desktop extras from Valve's package (Add to Steam, Nested Desktop, icon, keyboard rule, KWallet) |
 | `lib/single-user.sh` | Single user mode: no lock screen, user switching or log out |
 | `lib/steam-machine.sh` | Steam Machine support: LED driver, LED access, steamos-manager |
-| `tools/bundle.sh` | Builds the single-file version (`dist/setup-gamescope-boot.sh`) |
+| `.github/tools/bundle.sh` | Builds the single-file version (`dist/setup-gamescope-boot.sh`) |
 | `.github/workflows/bundle.yml` | Builds and checks it on every push; publishes it on `main` |
 
 The single-file version is generated: on every push to `main`, GitHub
-Actions runs `tools/bundle.sh`, checks the result with `bash -n` and
+Actions runs `.github/tools/bundle.sh`, checks the result with `bash -n` and
 shellcheck, and uploads it to the rolling `latest` release. It inlines
 `lib/*.sh` and wraps the entry point in `main()`, so bash has read the whole
 file before anything runs; when stdin is a pipe (`curl | bash`) it reattaches

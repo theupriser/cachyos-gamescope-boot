@@ -1,4 +1,4 @@
-# Builds the single-file wizard (tools/bundle.sh) and publishes it as the
+# Builds the single-file wizard (.github/tools/bundle.sh) and publishes it as the
 # asset of the rolling "latest" release, for:
 #   curl -fsSL https://github.com/theupriser/cachyos-gamescope-boot/releases/download/latest/setup-gamescope-boot.sh | bash
 # Pull requests only build and check it.
@@ -22,7 +22,7 @@ jobs:
           fetch-depth: 0 # for the version in the bundle's header
 
       - name: Build
-        run: tools/bundle.sh dist/setup-gamescope-boot.sh
+        run: .github/tools/bundle.sh dist/setup-gamescope-boot.sh
 
       - name: Check
         run: |
@@ -40,14 +40,23 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          notes="Single-file build of $(git describe --always) ($(git log -1 --format=%cs)).
+          version="$(grep -oP '^VERSION=\K.*' setup-gamescope-boot.sh)"
+          # This version's section of CHANGELOG.md, without its heading.
+          changes="$(awk -v v="$version" '
+              $0 ~ "^## " { if (found) exit; if (index($0, "## " v " ") == 1) { found = 1; next } }
+              found' CHANGELOG.md)"
+          notes="Single-file build of v$version ($(git describe --always), $(git log -1 --format=%cs)).
           Run it with:
 
-              curl -fsSL https://github.com/${{ github.repository }}/releases/download/latest/setup-gamescope-boot.sh | bash"
+              curl -fsSL https://github.com/${{ github.repository }}/releases/download/latest/setup-gamescope-boot.sh | bash
+
+          ## Changes in v$version
+          $changes"
+          title="Latest single-file build (v$version)"
           if gh release view latest >/dev/null 2>&1; then
-            gh release edit latest --notes "$notes"
+            gh release edit latest --title "$title" --notes "$notes"
           else
-            gh release create latest --title "Latest single-file build" --notes "$notes" --latest
+            gh release create latest --title "$title" --notes "$notes" --latest
           fi
           # Move the tag to this commit and replace the asset.
           git tag -f latest && git push -f origin latest

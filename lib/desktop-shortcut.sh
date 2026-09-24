@@ -43,9 +43,10 @@ EOF
 
     # SteamOS itself uses Valve's "gaming-return" icon (Steam logo with a
     # return arrow; the Deck-style arrow is only used on Steam Deck
-    # hardware). It comes with the Vapor theme; without it, use Steam's icon.
+    # hardware). The theme installs it (lib/steamos-extras.sh) and updates
+    # the shortcut via set_shortcut_icon; without it, use Steam's icon.
     local shortcut_icon="steam"
-    [[ -f "$user_home/.local/share/icons/hicolor/scalable/actions/gaming-return.svg" ]] &&
+    [[ -f /usr/local/share/icons/hicolor/scalable/actions/gaming-return.svg ]] &&
         shortcut_icon="gaming-return"
 
     # 2. Generate the .desktop shortcut with instant session switcher strings
@@ -67,6 +68,14 @@ EOF
     chmod +x "$shortcut_path"
 
     ok "Desktop shortcut created successfully."
+}
+
+set_shortcut_icon() {
+    # set_shortcut_icon <icon>: update an existing shortcut, if any.
+    local shortcut
+    shortcut="$(xdg-user-dir DESKTOP 2>/dev/null || echo "$HOME/Desktop")/Return to Gaming Mode.desktop"
+    [[ -f "$shortcut" ]] && sed -i "s/^Icon=.*/Icon=$1/" "$shortcut"
+    return 0
 }
 
 remove_desktop_shortcut() {
