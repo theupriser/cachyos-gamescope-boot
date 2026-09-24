@@ -35,8 +35,9 @@ gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
   the entry point's `for lib in ...; do` source loop and wraps everything
   after that loop in `main()`. Keep that loop on one line, keep all logic in
   functions, and don't rely on `SCRIPT_DIR` for anything but sourcing.
-  CI (`.github/workflows/bundle.yml`) publishes the bundle to the `latest`
-  release on pushes to `main`.
+  CI (`.github/workflows/bundle.yml`) publishes the bundle as release
+  `v$VERSION` on pushes to `main`; an existing version is never overwritten,
+  so bump `VERSION` for every release.
 
 ## Conventions
 
@@ -58,9 +59,21 @@ gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
 - Comments explain *why* (the CachyOS/Plasma quirk being worked around),
   not what the next line does.
 
-- **Versioning.** SemVer in `VERSION` (`setup-gamescope-boot.sh`, shown in
-  the menu header and the bundle). Every commit gets an entry in
-  `CHANGELOG.md` under its version; a new PR/branch bumps the version.
+- **Versioning and releases.** SemVer in `VERSION` (`setup-gamescope-boot.sh`,
+  shown in the menu header and the bundle header).
+  - Every commit gets an entry in `CHANGELOG.md` under its version (short hash
+    + subject; a commit can't contain its own hash, so fill it in with the
+    next commit). The section heading must be `## <VERSION> - <date>`: CI
+    cuts the release notes out of the changelog by that heading.
+  - Every PR that should be released bumps `VERSION` and adds its section.
+    A push to `main` publishes release `v$VERSION` (tag + bundle + that
+    changelog section) and marks it latest. An existing version is never
+    overwritten: without a bump nothing is released, and pull requests show
+    a warning.
+  - Users install through `releases/latest/download/setup-gamescope-boot.sh`
+    (GitHub's newest release). The `latest` tag and release follow the newest
+    version tag too (moved, asset replaced, when a new version is released),
+    so the older URL `releases/download/latest/...` keeps working.
 
 ## Non-obvious behaviour to preserve
 
