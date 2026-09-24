@@ -56,12 +56,21 @@ Machine LED driver works on every installed kernel and survives kernel updates.
   - When a new version is released, the `latest` tag and release move to it
     (bundle replaced), so the older `.../releases/download/latest/...` URL
     also always gives the newest version.
-- **feat: Opt-in BIOS update for the Steam Machine**
+- `2f9b2a5` **feat: Opt-in BIOS update for the Steam Machine**
   - New menu item (Steam Machine only, never ticked by default) showing the
     current BIOS version and the newest from Valve's `fremont-hw-support`.
   - Two large warnings and two confirmations (y/N, then typing `UPDATE`),
     checksum-verified download, installed with fwupd; the wizard then offers
     the restart that writes it, with a warning to keep the power on.
+- `40c9ee6` **fix: BIOS update only when newer, device check first, aligned warnings**
+  - The item is greyed out and can't be ticked unless Valve has a newer BIOS.
+  - Before any warning: SHA-256 of Valve's package, then fwupd confirms the
+    firmware fits this machine's hardware; otherwise it stops.
+  - Warning box drawn with a solid red frame whose edges line up, and the
+    menu's "Now" column aligned.
+- **fix: shellcheck in the bundle, and the docs for the BIOS checks**
+  - A variable name in `lib/bios.sh` clashed with `lib/state.sh` in the bundle
+    (CI's shellcheck would fail); README, AGENTS.md and this changelog updated.
 
 ## 0.6.2 - 2026-09-23
 

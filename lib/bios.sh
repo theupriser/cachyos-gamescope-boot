@@ -143,12 +143,12 @@ bios_enable() {
     fi
     ok "fwupd confirms BIOS $BIOS_NEWEST is firmware for this machine."
 
-    local g="$c_green$c_bold" b="$c_bold" n="$c_reset"
+    local yes="$c_green$c_bold" b="$c_bold" n="$c_reset"
     bios_disclaimer "WARNING: BIOS UPDATE - ENTIRELY AT YOUR OWN RISK" \
         "Current BIOS: ${b}$current${n}" \
         "New BIOS:     ${b}$BIOS_NEWEST${n}" \
-        "Checksum:     ${g}OK${n} (Valve's package)" \
-        "Compatible:   ${g}yes${n} (checked by fwupd)"
+        "Checksum:     ${yes}OK${n} (Valve's package)" \
+        "Compatible:   ${yes}yes${n} (checked by fwupd)"
     if ! ask_yn "Do you understand the risks and want to continue?" n; then
         info "BIOS update cancelled; nothing was changed."; rm -rf "$tmp"; return 0
     fi

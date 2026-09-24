@@ -286,10 +286,13 @@ journalctl --user -b | grep -i led
 **BIOS updates** (opt-in, never ticked by default). On a Steam Machine the menu
 has an **Update BIOS** item that shows the current BIOS version and the newest
 one Valve ships (`F7F0108.cab` in its `fremont-hw-support` package, looked up
-on Valve's SteamOS mirror). Ticking it shows a large warning, asks for
-confirmation, shows the warning again and only continues when you type
-`UPDATE`. It then downloads the package (checksum verified) and hands the
-firmware to fwupd; the BIOS is written during the next restart.
+on Valve's SteamOS mirror). It can only be ticked when Valve has a newer BIOS
+than the one installed; otherwise it's greyed out. Before asking anything it
+downloads the package and checks it: the SHA-256 from Valve's repository
+proves it's Valve's file, and fwupd confirms the firmware is for this very
+machine (it compares the firmware's hardware IDs with the device). Only then
+it shows a large warning and asks for confirmation, shows the warning again
+and continues when you type `UPDATE`; the BIOS is written during the next restart.
 
 **At your own risk:** a failed or interrupted BIOS update can leave the machine
 unable to start. Keep it on mains power, and never turn off the power, unplug

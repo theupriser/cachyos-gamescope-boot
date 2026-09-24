@@ -135,6 +135,11 @@ gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
 - `bios` is an *action* (`ACTIONS` in `lib/menu.sh`), not an on/off
   component: never preselected (not even on a first run), never re-applied
   by `a`, not listed in the state overview, and `bios_status` is always off.
+  Only selectable when Valve's version differs from the installed one
+  (`component_selectable`, greyed out otherwise). Download, SHA-256 and the
+  fwupd device check (`get-details --json`: no `UpdateError`) come before the
+  warnings. The warning box uses `█` for its frame: Konsole draws a long
+  coloured row of `#` narrower, so the right edge wouldn't line up.
   Keep both confirmations (y/N, then typing `UPDATE`) and the warnings; the
   firmware comes from the newest `holo-X.Y` repo (`.files` db names the
   `.cab`, `.db` gives the SHA-256), and fwupd itself refuses non-Fremont
@@ -143,6 +148,11 @@ gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
   tight loop; keep that in mind when changing session handling.
 
 ## Checking changes
+
+The bundle puts every module in one file, so shellcheck sees all their
+`local` variables together: don't reuse a name another module uses as an
+array (e.g. `g` in `lib/state.sh`), or CI's shellcheck on the bundle fails.
+
 
 There is no test suite. At minimum:
 
