@@ -329,11 +329,11 @@ gamescope-session, ...) stay installed.
 | `lib/steamos-extras.sh` | SteamOS desktop extras from Valve's package (Add to Steam, Nested Desktop, icon, keyboard rule, KWallet) |
 | `lib/single-user.sh` | Single user mode: no lock screen, user switching or log out |
 | `lib/steam-machine.sh` | Steam Machine support: LED driver, LED access, steamos-manager |
-| `tools/bundle.sh` | Builds the single-file version (`dist/setup-gamescope-boot.sh`) |
+| `.github/tools/bundle.sh` | Builds the single-file version (`dist/setup-gamescope-boot.sh`) |
 | `.github/workflows/bundle.yml` | Builds and checks it on every push; publishes it on `main` |
 
 The single-file version is generated: on every push to `main`, GitHub
-Actions runs `tools/bundle.sh`, checks the result with `bash -n` and
+Actions runs `.github/tools/bundle.sh`, checks the result with `bash -n` and
 shellcheck, and uploads it to the rolling `latest` release. It inlines
 `lib/*.sh` and wraps the entry point in `main()`, so bash has read the whole
 file before anything runs; when stdin is a pipe (`curl | bash`) it reattaches

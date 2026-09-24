@@ -43,6 +43,7 @@ Machine LED driver works on every installed kernel and survives kernel updates.
     version's section of `CHANGELOG.md`.
   - Fix a shellcheck warning in the bundle (a variable name shared with
     `lib/state.sh`), which would have failed the CI check.
+- **chore: Move the bundle tool to .github/tools/bundle.sh**
 
 ## 0.6.2 - 2026-09-23
 
