@@ -35,15 +35,16 @@ Machine LED driver works on every installed kernel and survives kernel updates.
   - Menu shows every kernel with its headers, Steam controller driver and LED
     driver, plus whether the LEDs are loaded.
   - The selected menu row is highlighted in full.
-- **docs: Version 0.7.0 and CHANGELOG** (this release's docs)
+- `10b5164` **docs: Version 0.7.0 and CHANGELOG**
   - `VERSION` in the entry point, shown in the menu header and the bundle.
   - README and AGENTS.md updated for the theme, the extras and the LED driver.
-- **ci: Version and changelog in the release notes**
+- `eb3169e` **ci: Version and changelog in the release notes**
   - The `latest` release's title shows the version, and its notes include this
     version's section of `CHANGELOG.md`.
   - Fix a shellcheck warning in the bundle (a variable name shared with
     `lib/state.sh`), which would have failed the CI check.
-- **chore: Move the bundle tool to .github/tools/bundle.sh**
+- `d7231eb` **chore: Move the bundle tool to .github/tools/bundle.sh**
+- **docs: Commit hashes in the changelog**
 
 ## 0.6.2 - 2026-09-23
 
