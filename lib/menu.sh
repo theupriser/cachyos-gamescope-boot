@@ -5,13 +5,17 @@
 
 # Menu order. Components are turned on in this order and off in reverse;
 # gaming must come first (single user builds on it).
-COMPONENTS=(gaming theme glyphs single launcher machine bios)
+COMPONENTS=(gaming boot theme glyphs single launcher machine bios)
 # One-off actions rather than on/off components: never preselected, never
 # re-applied, not listed as on or off.
 ACTIONS=(bios)
+# Never preselected on a first run: booting into the desktop is a choice,
+# gamescope is the default.
+NO_PRESELECT=(boot)
 
 declare -A LABEL=(
     [gaming]="SteamOS conversion: boot into gaming mode, Steam on the desktop"
+    [boot]="Boot into the desktop instead of gaming mode"
     [theme]="Install SteamOS theme: Vapor look (cachyos-vapor)"
     [glyphs]="Install Steam Deck/Machine icons: Deck button icons in gaming mode"
     [single]="Single user mode: no password, lock screen or log out (SDDM)"
@@ -29,6 +33,19 @@ component_available() {
 }
 
 is_action() { [[ " ${ACTIONS[*]} " == *" $1 "* ]]; }
+
+boot_mode() {
+    # boot_mode 0|1: the "Boot into" choice as a word, for messages; "turn
+    # off boot into the desktop" reads as the opposite of what was chosen.
+    if [[ "$1" == 1 ]]; then echo desktop; else echo gamescope; fi
+}
+
+menu_visible() {
+    # Shown in the menu. "Boot into" is a sub-option of the conversion: only
+    # while the conversion is ticked.
+    component_available "$1" || return 1
+    [[ "$1" != boot || "${WANTED[gaming]:-0}" == 1 ]]
+}
 
 component_selectable() {
     # Greyed out and not tickable when it has nothing to do.
@@ -49,7 +66,8 @@ detect_components() {
     # First run: preselect the full SteamOS experience (never an action).
     if [[ "$any" == false ]]; then
         for c in "${COMPONENTS[@]}"; do
-            component_available "$c" && ! is_action "$c" && WANTED[$c]=1
+            component_available "$c" && ! is_action "$c" &&
+                [[ " ${NO_PRESELECT[*]} " != *" $c "* ]] && WANTED[$c]=1
         done
     fi
 }
@@ -60,7 +78,9 @@ toggle_component() {
     WANTED[$c]=$(( 1 - WANTED[$c] ))
     # Single user mode only makes sense on top of the SteamOS conversion.
     if [[ "$c" == single && "${WANTED[single]}" == 1 ]]; then WANTED[gaming]=1; fi
-    if [[ "$c" == gaming && "${WANTED[gaming]}" == 0 ]]; then WANTED[single]=0; fi
+    if [[ "$c" == gaming && "${WANTED[gaming]}" == 0 ]]; then WANTED[single]=0; WANTED[boot]=0; fi
+    # Where to boot to is part of the conversion, too.
+    if [[ "$c" == boot && "${WANTED[boot]}" == 1 ]]; then WANTED[gaming]=1; fi
 }
 
 show_menu() {
@@ -69,7 +89,7 @@ show_menu() {
     printf "  ${c_bold}%-3s %-6s %-6s %s${c_reset}\n" "#" "Now" "Want" "Component"
     MENU_ITEMS=()
     for c in "${COMPONENTS[@]}"; do
-        component_available "$c" || continue
+        menu_visible "$c" || continue
         i=$((i + 1)); MENU_ITEMS[$i]=$c
         # Pad the plain word, then colour it: colour codes would count as width.
         now="off"; [[ "${CURRENT[$c]}" == 1 ]] && now="on"
@@ -77,7 +97,13 @@ show_menu() {
         now="$(printf '%-6s' "$now")"
         [[ "${CURRENT[$c]}" == 1 ]] && now="${now/on/${c_green}on${c_reset}}"
         want="[ ]"; [[ "${WANTED[$c]}" == 1 ]] && want="[x]"
-        if component_selectable "$c"; then
+        if [[ "$c" == boot ]]; then
+            # A choice rather than a checkbox: Now/Want show the mode.
+            now="gaming"; [[ "${CURRENT[boot]}" == 1 ]] && now="desk"
+            [[ "${CURRENT[gaming]}" == 1 ]] || now="-"
+            want="gaming"; [[ "${WANTED[boot]}" == 1 ]] && want="desk"
+            printf "  %-3s %-6s %-6s   └ %s\n" "$i" "$now" "$want" "$(boot_choice "${WANTED[boot]}")"
+        elif component_selectable "$c"; then
             printf "  %-3s %b %-6s %s\n" "$i" "$now" "$want" "${LABEL[$c]}"
         else
             printf "  %b%-3s %-6s %-6s %s (not available)%b\n" "$c_dim" "$i" "$now" "$want" "${LABEL[$c]}" "$c_reset"
@@ -109,12 +135,21 @@ draw_menu_tui() {
     echo
     MENU_ITEMS=()
     for c in "${COMPONENTS[@]}"; do
-        component_available "$c" || continue
+        menu_visible "$c" || continue
         MENU_ITEMS[$i]=$c
         box="[ ]"; [[ "${WANTED[$c]}" == 1 ]] && box="[${c_green}x${c_reset}]"
         state="  (now: off)"; [[ "${CURRENT[$c]}" == 1 ]] && state="  (now: ${c_green}on${c_reset})"
         is_action "$c" && state="  (opt-in, runs once)"
         line="$box ${LABEL[$c]}"
+        if [[ "$c" == boot ]]; then
+            # A choice rather than a checkbox; Space switches it.
+            # Indented under the conversion, whose sub-option it is.
+            line="$(boot_choice "${WANTED[boot]}")"
+            line="    └ ${line/\[/[${c_green}}"; line="${line/\]/${c_reset}]}"
+            local mode=gamescope; [[ "${CURRENT[boot]}" == 1 ]] && mode=desktop
+            state="  (${c_bold}←/→${c_reset} choose)"
+            [[ "${CURRENT[gaming]}" == 1 ]] && state="  (now: $mode; ${c_bold}←/→${c_reset} choose)"
+        fi
         if ! component_selectable "$c"; then
             # Greyed out: nothing to do (e.g. BIOS already up to date).
             local mark="   "; (( i == cursor )) && mark=" ${c_cyan}>${c_reset} "
@@ -130,7 +165,8 @@ draw_menu_tui() {
     echo
     echo -e "$KERNEL_OVERVIEW"
     echo
-    echo -e "  ${c_bold}Up/Down${c_reset} move   ${c_bold}Space${c_reset} select   ${c_bold}Enter${c_reset} run   ${c_bold}a${c_reset} run + re-apply what's on   ${c_bold}q${c_reset} quit"
+    echo -e "  ${c_bold}Up/Down${c_reset} move   ${c_bold}Space${c_reset} select   ${c_bold}Left/Right${c_reset} choose   ${c_bold}Enter${c_reset} run"
+    echo -e "  ${c_bold}a${c_reset} run + re-apply what's on   ${c_bold}q${c_reset} quit"
 }
 
 run_menu_tui() {
@@ -140,6 +176,8 @@ run_menu_tui() {
     while true; do
         draw_menu_tui "$cursor"
         count=${#MENU_ITEMS[@]}
+        # The list shrinks when the conversion (and its sub-option) is unticked.
+        if (( cursor >= count )); then cursor=$(( count - 1 )); draw_menu_tui "$cursor"; fi
         IFS= read -rsn1 key
         if [[ "$key" == $'\e' ]]; then
             IFS= read -rsn2 -t 0.05 rest
@@ -149,6 +187,9 @@ run_menu_tui() {
             $'\e[A'|k) (( cursor = (cursor + count - 1) % count )) ;;
             $'\e[B'|j) (( cursor = (cursor + 1) % count )) ;;
             " ") toggle_component "${MENU_ITEMS[$cursor]}" ;;
+            # On the "Boot into" row: left = gamescope, right = desktop.
+            $'\e[D'|h) [[ "${MENU_ITEMS[$cursor]}" == boot && "${WANTED[boot]}" == 1 ]] && toggle_component boot ;;
+            $'\e[C'|l) [[ "${MENU_ITEMS[$cursor]}" == boot && "${WANTED[boot]}" == 0 ]] && toggle_component boot ;;
             "") break ;;
             a|A) REAPPLY=true; break ;;
             q|Q) tput cnorm 2>/dev/null; echo; return 1 ;;
@@ -208,11 +249,13 @@ apply_changes() {
     [[ "${WANTED[single]}" == 1 ]] && LOGIN_MANAGER=sddm
 
     for c in "${TO_DISABLE[@]}"; do
-        echo; echo -e "${c_bold}Turning off: ${LABEL[$c]}${c_reset}"
+        if [[ "$c" == boot ]]; then echo; echo -e "${c_bold}Boot into: gamescope${c_reset}"
+        else echo; echo -e "${c_bold}Turning off: ${LABEL[$c]}${c_reset}"; fi
         "${c}_disable" || failed+=("$c")
     done
     for c in "${TO_ENABLE[@]}"; do
-        if is_action "$c"; then echo; echo -e "${c_bold}Running: ${LABEL[$c]%%:*}${c_reset}"
+        if [[ "$c" == boot ]]; then echo; echo -e "${c_bold}Boot into: desktop${c_reset}"
+        elif is_action "$c"; then echo; echo -e "${c_bold}Running: ${LABEL[$c]%%:*}${c_reset}"
         else echo; echo -e "${c_bold}Turning on: ${LABEL[$c]}${c_reset}"; fi
         "${c}_enable" || failed+=("$c")
     done
