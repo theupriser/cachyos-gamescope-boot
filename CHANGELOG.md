@@ -27,10 +27,11 @@ itself on the desktop.
     old download URL keeps working; internal names such as
     `~/.local/state/cachyos-gamescope-boot` stay, so existing installs can
     still be turned off.
-- **feat: The script is now steamify.sh**
+- `69a420b` **feat: The script is now steamify.sh**
   - `setup-gamescope-boot.sh` is renamed to `steamify.sh`; releases publish the
     bundle under both names, so `.../download/setup-gamescope-boot.sh` keeps
     working. The Steamify shortcut runs `steamify.sh`.
+- **docs: Shorter README intro**
 
 ## 0.8.0 - 2026-09-24 (#8)
 

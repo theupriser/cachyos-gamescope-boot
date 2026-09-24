@@ -5,10 +5,6 @@ into Steam's Big Picture (gamescope), and you can switch to the KDE Plasma
 desktop and back whenever you like - just like on a Steam Deck or Valve's
 Steam Machine.
 
-Out of the box, CachyOS doesn't quite manage this: the switch to the desktop
-can hang, and the PC doesn't reliably boot back into gaming mode. Steamify
-fixes that and sets everything up for you.
-
 ## What you get
 
 The wizard is a menu: pick what you want, and it turns each part on or off.
