@@ -1,7 +1,7 @@
 #!/bin/bash
 # Booting into gaming mode: autologin into gamescope with SDDM or
 # plasma-login-manager (plus the session sync bridge the latter needs).
-# Sourced by setup-gamescope-boot.sh; not meant to be run on its own.
+# Sourced by steamify.sh; not meant to be run on its own.
 
 BASE_CONF="/etc/plasmalogin.conf"
 

@@ -2,10 +2,43 @@
 
 All notable changes, per version and per commit. Versions follow
 [Semantic Versioning](https://semver.org/); the current one is `VERSION` in
-`setup-gamescope-boot.sh`. Versions before 0.7.0 were numbered afterwards,
+`steamify.sh`. Versions before 0.7.0 were numbered afterwards,
 one per merged pull request.
 
-## 0.8.0 - 2026-09-24
+## 0.9.0 - 2026-09-24
+
+The wizard is now called **Steamify CachyOS**, and can put a shortcut to
+itself on the desktop.
+
+- `f01aa93` **feat: Wizard shortcut on the desktop and in the launcher**
+  - New menu item: a desktop icon and app launcher entry
+    that open the newest release of the wizard in Konsole (`curl | bash`).
+  - Its icon: Valve's Return to Gaming Mode icon with a gear instead of the
+    arrow (`assets/steam-gaming-settings.svg`), published with every release
+    and downloaded from there.
+  - Desktop files are written already executable, so Plasma runs them instead
+    of opening them in an editor.
+- `be874b8` **feat: Rename to Steamify CachyOS**
+  - Menu header, the shortcut ("Steamify CachyOS", menu item "Steamify
+    shortcut"), release titles, README and AGENTS.md.
+- `1c34a97` **chore: Repository renamed to steamify-cachyos**
+  - All URLs point to `github.com/theupriser/steamify-cachyos` (the old ones
+    redirect). The script keeps its name, `setup-gamescope-boot.sh`, so the
+    old download URL keeps working; internal names such as
+    `~/.local/state/cachyos-gamescope-boot` stay, so existing installs can
+    still be turned off.
+- `69a420b` **feat: The script is now steamify.sh**
+  - `setup-gamescope-boot.sh` is renamed to `steamify.sh`; releases publish the
+    bundle under both names, so `.../download/setup-gamescope-boot.sh` keeps
+    working. The Steamify shortcut runs `steamify.sh`.
+- `b0553ae` **docs: Shorter README intro**
+- **feat: The shortcut's window closes itself after a countdown**
+  - After the wizard ends, a 10-second countdown closes the Konsole window
+    (Enter closes it right away); after an error it stays open until Enter.
+  - A failed download now counts as an error (`pipefail`) instead of running
+    an empty script.
+
+## 0.8.0 - 2026-09-24 (#8)
 
 An opt-in BIOS update for the Steam Machine, and a menu that comes back after
 every run.
@@ -40,7 +73,7 @@ every run.
   - "now F7F0107, newest F7F0108 (own risk)", "F7F0108 waits for a restart",
     "F7F0107 is up to date"; shorter dry-run line.
 - `99a95ab` **fix: Kernel legend only mentions the LEDs on a Steam Machine**
-- **docs: Last commit hash in the changelog; 0.7.0 was released on its own (#6, #7)**
+- `c0014ee` **docs: Last commit hash in the changelog; 0.7.0 was released on its own (#6, #7)**
 
 ## 0.7.0 - 2026-09-24 (#6, #7)
 

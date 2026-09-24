@@ -1,10 +1,12 @@
 # Builds the single-file wizard (.github/tools/bundle.sh) and publishes it as a
-# release per version: tag v$VERSION (VERSION in setup-gamescope-boot.sh),
+# release per version: tag v$VERSION (VERSION in steamify.sh),
 # with that version's CHANGELOG.md section as notes. A released version is
 # never overwritten; the newest one is marked latest, and the "latest" tag and
 # release are moved to it, so both of these always get the newest version:
-#   curl -fsSL https://github.com/theupriser/cachyos-gamescope-boot/releases/latest/download/setup-gamescope-boot.sh | bash
-#   curl -fsSL https://github.com/theupriser/cachyos-gamescope-boot/releases/download/latest/setup-gamescope-boot.sh | bash
+#   curl -fsSL https://github.com/theupriser/steamify-cachyos/releases/latest/download/steamify.sh | bash
+#   curl -fsSL https://github.com/theupriser/steamify-cachyos/releases/download/latest/steamify.sh | bash
+# The bundle is also published as setup-gamescope-boot.sh, its name before
+# 0.9.0, so older install commands keep working.
 # Pull requests only build and check it, and warn when VERSION is already released.
 name: Single-file build
 
@@ -26,29 +28,32 @@ jobs:
           fetch-depth: 0 # for the version in the bundle's header
 
       - name: Build
-        run: .github/tools/bundle.sh dist/setup-gamescope-boot.sh
+        run: |
+          .github/tools/bundle.sh dist/steamify.sh
+          # Old name (before 0.9.0), for older install commands and links.
+          cp dist/steamify.sh dist/setup-gamescope-boot.sh
 
       - name: Check
         run: |
-          bash -n dist/setup-gamescope-boot.sh
+          bash -n dist/steamify.sh
           # SC2034/SC2154: variables used across the inlined modules.
-          shellcheck -S warning -e SC2034,SC2154 dist/setup-gamescope-boot.sh
+          shellcheck -S warning -e SC2034,SC2154 dist/steamify.sh
 
       - uses: actions/upload-artifact@v4
         with:
-          name: setup-gamescope-boot
-          path: dist/setup-gamescope-boot.sh
+          name: steamify
+          path: dist/steamify.sh
 
       - name: Version
         id: version
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          version="$(grep -oP '^VERSION=\K.*' setup-gamescope-boot.sh)"
+          version="$(grep -oP '^VERSION=\K.*' steamify.sh)"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           if gh release view "v$version" >/dev/null 2>&1; then
             echo "released=true" >> "$GITHUB_OUTPUT"
-            echo "::warning::v$version is already released and won't be overwritten. Bump VERSION in setup-gamescope-boot.sh and add a CHANGELOG.md section to release this."
+            echo "::warning::v$version is already released and won't be overwritten. Bump VERSION in steamify.sh and add a CHANGELOG.md section to release this."
           else
             echo "released=false" >> "$GITHUB_OUTPUT"
           fi
@@ -68,12 +73,12 @@ jobs:
           notes="Single-file build of v$VERSION ($(git describe --always), $(git log -1 --format=%cs)).
           Run the newest version with:
 
-              curl -fsSL https://github.com/${{ github.repository }}/releases/latest/download/setup-gamescope-boot.sh | bash
+              curl -fsSL https://github.com/${{ github.repository }}/releases/latest/download/steamify.sh | bash
 
           ## Changes in v$VERSION
           $changes"
-          gh release create "v$VERSION" dist/setup-gamescope-boot.sh \
-              --target "$GITHUB_SHA" --title "v$VERSION" --notes "$notes" --latest
+          gh release create "v$VERSION" dist/steamify.sh dist/setup-gamescope-boot.sh assets/steam-gaming-settings.svg \
+              --target "$GITHUB_SHA" --title "Steamify CachyOS v$VERSION" --notes "$notes" --latest
 
           # "latest" follows the newest version tag, for the older install URL
           # (.../releases/download/latest/...). Only moved when a new version
@@ -81,8 +86,8 @@ jobs:
           git tag -f latest "$GITHUB_SHA" && git push -f origin latest
           latest_notes="Always the newest version, currently v$VERSION (see its release for the changes)."
           if gh release view latest >/dev/null 2>&1; then
-            gh release edit latest --title "Latest (v$VERSION)" --notes "$latest_notes" --latest=false
+            gh release edit latest --title "Steamify CachyOS - latest (v$VERSION)" --notes "$latest_notes" --latest=false
           else
-            gh release create latest --title "Latest (v$VERSION)" --notes "$latest_notes" --latest=false
+            gh release create latest --title "Steamify CachyOS - latest (v$VERSION)" --notes "$latest_notes" --latest=false
           fi
-          gh release upload latest dist/setup-gamescope-boot.sh --clobber
+          gh release upload latest dist/steamify.sh dist/setup-gamescope-boot.sh assets/steam-gaming-settings.svg --clobber

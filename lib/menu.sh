@@ -1,11 +1,11 @@
 #!/bin/bash
 # Interactive menu: detects which components are on, lets the user pick what
 # they want, then turns components on or off to match.
-# Sourced by setup-gamescope-boot.sh; not meant to be run on its own.
+# Sourced by steamify.sh; not meant to be run on its own.
 
 # Menu order. Components are turned on in this order and off in reverse;
 # gaming must come first (single user builds on it).
-COMPONENTS=(gaming theme glyphs single machine bios)
+COMPONENTS=(gaming theme glyphs single launcher machine bios)
 # One-off actions rather than on/off components: never preselected, never
 # re-applied, not listed as on or off.
 ACTIONS=(bios)
@@ -15,6 +15,7 @@ declare -A LABEL=(
     [theme]="Install SteamOS theme: Vapor look (cachyos-vapor)"
     [glyphs]="Install Steam Deck/Machine icons: Deck button icons in gaming mode"
     [single]="Single user mode: no password, lock screen or log out (SDDM)"
+    [launcher]="Steamify shortcut: desktop icon to run this again"
     [machine]="Steam Machine support: LED bar driver, hardware settings in Steam"
     [bios]="Update BIOS"
 )
@@ -103,7 +104,7 @@ run_menu() {
 draw_menu_tui() {
     local cursor="$1" i=0 c box state line
     printf '\033[H\033[2J'
-    echo -e "${c_bold}CachyOS Steam Deck-style Gamescope Boot Wizard${c_reset} v$VERSION"
+    echo -e "${c_bold}Steamify CachyOS${c_reset} v$VERSION"
     echo "Pick what you want. Anything you untick is put back the way it was."
     echo
     MENU_ITEMS=()

@@ -3,7 +3,7 @@
 # log out, since typing a password with a controller is miserable. Goes
 # together with SDDM (see lib/login-manager.sh). All changes are journaled
 # per user (lib/state.sh), so turning it off restores KDE's previous state.
-# Sourced by setup-gamescope-boot.sh; not meant to be run on its own.
+# Sourced by steamify.sh; not meant to be run on its own.
 
 single_status() {
     [[ "$(kreadconfig6 --file kdeglobals --group "KDE Action Restrictions" --key action/lock_screen)" == false ]]

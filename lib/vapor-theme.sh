@@ -1,6 +1,6 @@
 #!/bin/bash
 # SteamOS Vapor desktop theme, from CachyOS's cachyos-vapor package.
-# Sourced by setup-gamescope-boot.sh; not meant to be run on its own.
+# Sourced by steamify.sh; not meant to be run on its own.
 
 VAPOR_LOOKANDFEEL=com.valve.vapor.desktop
 VAPOR_DEFAULTS=/usr/share/plasma/look-and-feel/$VAPOR_LOOKANDFEEL/contents/defaults

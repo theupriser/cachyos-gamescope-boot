@@ -3,7 +3,7 @@
 # off again exactly: the first time a component changes a key, the key's
 # previous value is recorded, and reverting the component puts it back (or
 # deletes the key if it didn't exist before).
-# Sourced by setup-gamescope-boot.sh; not meant to be run on its own.
+# Sourced by steamify.sh; not meant to be run on its own.
 
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/cachyos-gamescope-boot"
 UNSET=$'\x01'

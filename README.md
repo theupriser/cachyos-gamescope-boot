@@ -1,13 +1,9 @@
-# CachyOS Gamescope Boot Wizard
+# Steamify CachyOS
 
 Turn a CachyOS desktop PC into a SteamOS-style console: it boots straight
 into Steam's Big Picture (gamescope), and you can switch to the KDE Plasma
 desktop and back whenever you like - just like on a Steam Deck or Valve's
 Steam Machine.
-
-Out of the box, CachyOS doesn't quite manage this: the switch to the desktop
-can hang, and the PC doesn't reliably boot back into gaming mode. This
-script fixes that and sets everything up for you.
 
 ## What you get
 
@@ -24,10 +20,13 @@ Everything you turn off is put back the way it was.
 4. **Single user mode** - like SteamOS: never a login or lock screen, no
    user switching or logging out. Typing a password with a controller is no
    fun. (Needs 1.)
-5. **Steam Machine support** - only shown on a Valve Steam Machine: the
+5. **Steamify shortcut** - a "Steamify CachyOS" icon on the desktop and in
+   the app launcher (the Steam logo with a gear) that opens the newest version
+   of Steamify in Konsole, so you don't need the install command again.
+6. **Steam Machine support** - only shown on a Valve Steam Machine: the
    driver for the front LED bar, and the hardware settings in Steam (fan,
    TV control over HDMI-CEC).
-6. **Update BIOS** - only on a Steam Machine, opt-in and at your own risk:
+7. **Update BIOS** - only on a Steam Machine, opt-in and at your own risk:
    installs the newest Steam Machine BIOS from Valve (see
    [BIOS updates](#bios-updates-steam-machine)).
 
@@ -41,17 +40,19 @@ Everything you turn off is put back the way it was.
 Open **Konsole** on your Plasma desktop and run:
 
 ```bash
-curl -fsSL https://github.com/theupriser/cachyos-gamescope-boot/releases/latest/download/setup-gamescope-boot.sh | bash
+curl -fsSL https://github.com/theupriser/steamify-cachyos/releases/latest/download/steamify.sh | bash
 ```
 
-That downloads and runs the latest single-file version, and works in any
+(Before 0.9.0 the script was called `setup-gamescope-boot.sh`; that name
+still works in the download URL.) That downloads and runs the latest
+single-file version, and works in any
 shell, including fish (CachyOS's default). Prefer to keep a copy, or to look
 at the script first? Clone the repository instead:
 
 ```bash
-git clone https://github.com/theupriser/cachyos-gamescope-boot.git
-cd cachyos-gamescope-boot
-./setup-gamescope-boot.sh
+git clone https://github.com/theupriser/steamify-cachyos.git
+cd steamify-cachyos
+./steamify.sh
 ```
 
 Run it as yourself, not as root. You'll see a checklist:
@@ -348,7 +349,7 @@ gamescope-session, ...) stay installed.
 
 | File | Responsibility |
 |---|---|
-| `setup-gamescope-boot.sh` | Entry point: checks, menu, apply, summary, restart |
+| `steamify.sh` | Entry point: checks, menu, apply, summary, restart |
 | `lib/menu.sh` | The menu: detect, toggle, plan and apply changes |
 | `lib/state.sh` | Undo journal for KDE settings (`kset`/`krevert`) |
 | `lib/common.sh` | Output helpers, prompts, backups, plasmashell handling |
@@ -359,9 +360,10 @@ gamescope-session, ...) stay installed.
 | `lib/vapor-theme.sh` | SteamOS theme: installs and switches to `cachyos-vapor` |
 | `lib/steamos-extras.sh` | SteamOS desktop extras from Valve's package (Add to Steam, Nested Desktop, icon, keyboard rule, KWallet) |
 | `lib/single-user.sh` | Single user mode: no lock screen, user switching or log out |
+| `lib/wizard-shortcut.sh` | Steamify shortcut: desktop icon and launcher entry that run the newest release |
 | `lib/bios.sh` | Update BIOS (Steam Machine, opt-in): current/newest version, double confirmation, fwupd |
 | `lib/steam-machine.sh` | Steam Machine support: LED driver, LED access, steamos-manager |
-| `.github/tools/bundle.sh` | Builds the single-file version (`dist/setup-gamescope-boot.sh`) |
+| `.github/tools/bundle.sh` | Builds the single-file version (`dist/steamify.sh`) |
 | `.github/workflows/bundle.yml` | Builds and checks it on every push; publishes it on `main` |
 
 The single-file version is generated: on every push to `main`, GitHub

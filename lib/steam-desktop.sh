@@ -1,7 +1,7 @@
 #!/bin/bash
 # Steam in the Plasma desktop session: gamepad UI args, virtual keyboard,
 # autostart. Part of the SteamOS conversion (gaming_enable/gaming_disable).
-# Sourced by setup-gamescope-boot.sh; not meant to be run on its own.
+# Sourced by steamify.sh; not meant to be run on its own.
 
 steam_enable() {
     info "Applying non-optional SteamOS environment & keyboard fixes..."
