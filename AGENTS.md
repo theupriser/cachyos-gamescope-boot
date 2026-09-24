@@ -132,6 +132,13 @@ gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
   and `ensure-kernel-headers.service` installs missing ones at boot (a
   pacman hook can't run pacman), which triggers DKMS's install hook. The module creates
   `/sys/class/leds/valve-leds*`.
+- `bios` is an *action* (`ACTIONS` in `lib/menu.sh`), not an on/off
+  component: never preselected (not even on a first run), never re-applied
+  by `a`, not listed in the state overview, and `bios_status` is always off.
+  Keep both confirmations (y/N, then typing `UPDATE`) and the warnings; the
+  firmware comes from the newest `holo-X.Y` repo (`.files` db names the
+  `.cab`, `.db` gives the SHA-256), and fwupd itself refuses non-Fremont
+  hardware. It can only be tested up to fwupd's refusal in the VM.
 - `Relogin=true` means a gamescope that fails to start is relaunched in a
   tight loop; keep that in mind when changing session handling.
 

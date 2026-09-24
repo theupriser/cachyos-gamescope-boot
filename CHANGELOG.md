@@ -52,10 +52,16 @@ Machine LED driver works on every installed kernel and survives kernel updates.
   - Install with `.../releases/latest/download/setup-gamescope-boot.sh`, which
     always points to the newest release.
 - `1604ed1` **docs: Versioning and release rules in AGENTS.md**
-- **ci: The latest tag follows the newest version tag**
+- `6afef78` **ci: The latest tag follows the newest version tag**
   - When a new version is released, the `latest` tag and release move to it
     (bundle replaced), so the older `.../releases/download/latest/...` URL
     also always gives the newest version.
+- **feat: Opt-in BIOS update for the Steam Machine**
+  - New menu item (Steam Machine only, never ticked by default) showing the
+    current BIOS version and the newest from Valve's `fremont-hw-support`.
+  - Two large warnings and two confirmations (y/N, then typing `UPDATE`),
+    checksum-verified download, installed with fwupd; the wizard then offers
+    the restart that writes it, with a warning to keep the power on.
 
 ## 0.6.2 - 2026-09-23
 

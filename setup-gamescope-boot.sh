@@ -19,7 +19,7 @@ VERSION=0.7.0
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-for lib in common state packages login-manager single-user steam-desktop steam-machine vapor-theme steamos-extras desktop-shortcut menu; do
+for lib in common state packages login-manager single-user steam-desktop steam-machine vapor-theme steamos-extras bios desktop-shortcut menu; do
     # shellcheck source=/dev/null
     source "$SCRIPT_DIR/lib/$lib.sh"
 done
@@ -52,7 +52,8 @@ echo
 echo -e "${c_bold}This will:${c_reset}"
 for c in "${TO_DISABLE[@]}"; do echo "  - turn off: ${LABEL[$c]}"; done
 for c in "${TO_ENABLE[@]}"; do
-    if [[ "${CURRENT[$c]}" == 1 ]]; then echo "  - re-apply: ${LABEL[$c]}"; else echo "  - turn on:  ${LABEL[$c]}"; fi
+    if is_action "$c"; then echo "  - run:      ${LABEL[$c]} (asks two more confirmations)"
+    elif [[ "${CURRENT[$c]}" == 1 ]]; then echo "  - re-apply: ${LABEL[$c]}"; else echo "  - turn on:  ${LABEL[$c]}"; fi
 done
 ask_yn "Go ahead?" y || { info "Nothing changed."; exit 0; }
 
@@ -67,13 +68,25 @@ echo
 detect_components
 echo -e "${c_bold}Done. Current state:${c_reset}"
 for c in "${COMPONENTS[@]}"; do
-    component_available "$c" || continue
+    component_available "$c" && ! is_action "$c" || continue
     if [[ "${CURRENT[$c]}" == 1 ]]; then echo -e "  ${c_green}on ${c_reset} ${LABEL[$c]}"; else echo "  off  ${LABEL[$c]}"; fi
 done
 if [[ ${#FAILED[@]} -gt 0 ]]; then
     warn "These had problems (see above): ${FAILED[*]}"
 fi
 echo
+
+# A staged BIOS update is written during the restart.
+if [[ -n "${BIOS_NEEDS_RESTART:-}" ]]; then
+    warn "The BIOS update is written during the next restart. Keep the power on and"
+    warn "don't touch the machine until it has fully started again, even if the screen stays black."
+    if ask_yn "Restart now to install the BIOS update?" n; then
+        sudo reboot
+    else
+        info "The BIOS update installs at your next restart."
+    fi
+    exit 0
+fi
 
 # Login manager changes only take effect after a restart.
 if [[ " ${TO_DISABLE[*]} ${TO_ENABLE[*]} " == *" gaming "* || " ${TO_DISABLE[*]} ${TO_ENABLE[*]} " == *" single "* ]]; then
