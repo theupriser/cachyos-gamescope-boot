@@ -24,10 +24,13 @@ Everything you turn off is put back the way it was.
 4. **Single user mode** - like SteamOS: never a login or lock screen, no
    user switching or logging out. Typing a password with a controller is no
    fun. (Needs 1.)
-5. **Steam Machine support** - only shown on a Valve Steam Machine: the
+5. **Wizard shortcut** - a "SteamOS Setup Wizard" icon on the desktop and in
+   the app launcher (the Steam logo with a gear) that opens the newest version
+   of this wizard in Konsole, so you don't need the install command again.
+6. **Steam Machine support** - only shown on a Valve Steam Machine: the
    driver for the front LED bar, and the hardware settings in Steam (fan,
    TV control over HDMI-CEC).
-6. **Update BIOS** - only on a Steam Machine, opt-in and at your own risk:
+7. **Update BIOS** - only on a Steam Machine, opt-in and at your own risk:
    installs the newest Steam Machine BIOS from Valve (see
    [BIOS updates](#bios-updates-steam-machine)).
 
@@ -359,6 +362,7 @@ gamescope-session, ...) stay installed.
 | `lib/vapor-theme.sh` | SteamOS theme: installs and switches to `cachyos-vapor` |
 | `lib/steamos-extras.sh` | SteamOS desktop extras from Valve's package (Add to Steam, Nested Desktop, icon, keyboard rule, KWallet) |
 | `lib/single-user.sh` | Single user mode: no lock screen, user switching or log out |
+| `lib/wizard-shortcut.sh` | Wizard shortcut: desktop icon and launcher entry that run the newest release |
 | `lib/bios.sh` | Update BIOS (Steam Machine, opt-in): current/newest version, double confirmation, fwupd |
 | `lib/steam-machine.sh` | Steam Machine support: LED driver, LED access, steamos-manager |
 | `.github/tools/bundle.sh` | Builds the single-file version (`dist/setup-gamescope-boot.sh`) |

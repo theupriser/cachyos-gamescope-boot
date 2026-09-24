@@ -149,6 +149,13 @@ gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
 - The entry point loops: menu, run, "back to the menu" (or `[m]`/`[r]` when a
   restart is needed), until `q`; the restart question is asked once at the
   end. Scripted input that runs out ends the loop like `q`.
+- Wizard shortcut (`launcher`): the icon runs `curl | bash` of
+  `releases/latest/download/setup-gamescope-boot.sh` in Konsole, so it's
+  always the newest release. Its icon, `assets/steam-gaming-settings.svg`
+  (Valve's GPL-2.0 return icon with a gear), is a release asset too, and is
+  downloaded from there (Steam's icon if that fails). Desktop files are
+  written with their mode already set (`install_executable`): Plasma opens a
+  desktop icon it first saw non-executable in an editor.
 - `Relogin=true` means a gamescope that fails to start is relaunched in a
   tight loop; keep that in mind when changing session handling.
 

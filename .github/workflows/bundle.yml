@@ -72,7 +72,7 @@ jobs:
 
           ## Changes in v$VERSION
           $changes"
-          gh release create "v$VERSION" dist/setup-gamescope-boot.sh \
+          gh release create "v$VERSION" dist/setup-gamescope-boot.sh assets/steam-gaming-settings.svg \
               --target "$GITHUB_SHA" --title "v$VERSION" --notes "$notes" --latest
 
           # "latest" follows the newest version tag, for the older install URL
@@ -85,4 +85,4 @@ jobs:
           else
             gh release create latest --title "Latest (v$VERSION)" --notes "$latest_notes" --latest=false
           fi
-          gh release upload latest dist/setup-gamescope-boot.sh --clobber
+          gh release upload latest dist/setup-gamescope-boot.sh assets/steam-gaming-settings.svg --clobber

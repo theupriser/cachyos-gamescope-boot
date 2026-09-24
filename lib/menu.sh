@@ -5,7 +5,7 @@
 
 # Menu order. Components are turned on in this order and off in reverse;
 # gaming must come first (single user builds on it).
-COMPONENTS=(gaming theme glyphs single machine bios)
+COMPONENTS=(gaming theme glyphs single launcher machine bios)
 # One-off actions rather than on/off components: never preselected, never
 # re-applied, not listed as on or off.
 ACTIONS=(bios)
@@ -15,6 +15,7 @@ declare -A LABEL=(
     [theme]="Install SteamOS theme: Vapor look (cachyos-vapor)"
     [glyphs]="Install Steam Deck/Machine icons: Deck button icons in gaming mode"
     [single]="Single user mode: no password, lock screen or log out (SDDM)"
+    [launcher]="Wizard shortcut: desktop icon to run this wizard again"
     [machine]="Steam Machine support: LED bar driver, hardware settings in Steam"
     [bios]="Update BIOS"
 )

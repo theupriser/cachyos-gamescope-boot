@@ -5,7 +5,18 @@ All notable changes, per version and per commit. Versions follow
 `setup-gamescope-boot.sh`. Versions before 0.7.0 were numbered afterwards,
 one per merged pull request.
 
-## 0.8.0 - 2026-09-24
+## 0.9.0 - 2026-09-24
+
+- **feat: Wizard shortcut on the desktop and in the launcher**
+  - New menu item: a "SteamOS Setup Wizard" desktop icon and app launcher entry
+    that open the newest release of the wizard in Konsole (`curl | bash`).
+  - Its icon: Valve's Return to Gaming Mode icon with a gear instead of the
+    arrow (`assets/steam-gaming-settings.svg`), published with every release
+    and downloaded from there.
+  - Desktop files are written already executable, so Plasma runs them instead
+    of opening them in an editor.
+
+## 0.8.0 - 2026-09-24 (#8)
 
 An opt-in BIOS update for the Steam Machine, and a menu that comes back after
 every run.
@@ -40,7 +51,7 @@ every run.
   - "now F7F0107, newest F7F0108 (own risk)", "F7F0108 waits for a restart",
     "F7F0107 is up to date"; shorter dry-run line.
 - `99a95ab` **fix: Kernel legend only mentions the LEDs on a Steam Machine**
-- **docs: Last commit hash in the changelog; 0.7.0 was released on its own (#6, #7)**
+- `c0014ee` **docs: Last commit hash in the changelog; 0.7.0 was released on its own (#6, #7)**
 
 ## 0.7.0 - 2026-09-24 (#6, #7)
 
