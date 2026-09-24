@@ -80,7 +80,9 @@ to restart (needed for changes to how the PC starts).
 
 After each run the menu comes back with the new state, so you can change more
 in one go; quit with **q**. When something needs a restart, you choose
-between going back to the menu and restarting now; quitting asks once more.
+between going back to the menu and restarting now. Quitting then asks
+"Restart now? [Y/n]": **n** takes you back to the menu (and the next **q**
+asks again); Ctrl+C quits without restarting.
 
 Run it again whenever you like - to change your choices, to turn things off
 again, or after a CachyOS update (press `a` in the menu to re-apply

@@ -56,8 +56,13 @@ install_valve_led_driver() {
     # got the running kernel's tree and failed (wrong kernel, and gcc against
     # a clang-built tree). DKMS reads this override after the package's
     # dkms.conf; written before the install so its own build works too.
-    printf '%s\n' "# Written by cachyos-gamescope-boot: build for DKMS's target kernel." \
-        'MAKE[0]="make KVERSION=${kernelver}"' | sudo tee "$LED_DKMS_OVERRIDE" >/dev/null
+    # On a fresh system dkms isn't installed yet, so /etc/dkms doesn't exist.
+    sudo mkdir -p "$(dirname "$LED_DKMS_OVERRIDE")"
+    if ! printf '%s\n' "# Written by cachyos-gamescope-boot: build for DKMS's target kernel." \
+        'MAKE[0]="make KVERSION=${kernelver}"' | sudo tee "$LED_DKMS_OVERRIDE" >/dev/null; then
+        err "Couldn't write $LED_DKMS_OVERRIDE; without it the LED driver only builds for the running kernel."
+        return 1
+    fi
 
     if ! pacman -Qi leds-valve-dkms-git >/dev/null 2>&1; then
         info "Installing leds-valve-dkms-git from the AUR via $aur_helper (non-interactive)..."
