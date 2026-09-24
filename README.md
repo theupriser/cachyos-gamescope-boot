@@ -74,7 +74,8 @@ Run it as yourself, not as root. You'll see a checklist:
   Up/Down move   Space select   Enter run   a run + re-apply what's on   q quit
 ```
 
-Move with the **arrow keys**, tick or untick with **Space**, and press
+Move with the **arrow keys**, tick or untick with **Space** (on the **Boot
+into** row, **Left/Right** choose gamescope or desktop), and press
 **Enter** to run. "now:" shows what's on at the moment. Below the list, every
 installed kernel is shown with its headers and Steam controller driver; on a
 Steam Machine also whether the LED bar driver is built for it, and whether

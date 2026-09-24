@@ -140,8 +140,9 @@ draw_menu_tui() {
             # Indented under the conversion, whose sub-option it is.
             line="$(boot_choice "${WANTED[boot]}")"
             line="    └ ${line/\[/[${c_green}}"; line="${line/\]/${c_reset}]}"
-            state="  (now: gamescope)"; [[ "${CURRENT[boot]}" == 1 ]] && state="  (now: desktop)"
-            [[ "${CURRENT[gaming]}" == 1 ]] || state=""
+            local mode=gamescope; [[ "${CURRENT[boot]}" == 1 ]] && mode=desktop
+            state="  (${c_bold}←/→${c_reset} choose)"
+            [[ "${CURRENT[gaming]}" == 1 ]] && state="  (now: $mode; ${c_bold}←/→${c_reset} choose)"
         fi
         if ! component_selectable "$c"; then
             # Greyed out: nothing to do (e.g. BIOS already up to date).
@@ -158,7 +159,8 @@ draw_menu_tui() {
     echo
     echo -e "$KERNEL_OVERVIEW"
     echo
-    echo -e "  ${c_bold}Up/Down${c_reset} move   ${c_bold}Space${c_reset} select   ${c_bold}Enter${c_reset} run   ${c_bold}a${c_reset} run + re-apply what's on   ${c_bold}q${c_reset} quit"
+    echo -e "  ${c_bold}Up/Down${c_reset} move   ${c_bold}Space${c_reset} select   ${c_bold}Left/Right${c_reset} choose   ${c_bold}Enter${c_reset} run"
+    echo -e "  ${c_bold}a${c_reset} run + re-apply what's on   ${c_bold}q${c_reset} quit"
 }
 
 run_menu_tui() {
@@ -179,6 +181,9 @@ run_menu_tui() {
             $'\e[A'|k) (( cursor = (cursor + count - 1) % count )) ;;
             $'\e[B'|j) (( cursor = (cursor + 1) % count )) ;;
             " ") toggle_component "${MENU_ITEMS[$cursor]}" ;;
+            # On the "Boot into" row: left = gamescope, right = desktop.
+            $'\e[D'|h) [[ "${MENU_ITEMS[$cursor]}" == boot && "${WANTED[boot]}" == 1 ]] && toggle_component boot ;;
+            $'\e[C'|l) [[ "${MENU_ITEMS[$cursor]}" == boot && "${WANTED[boot]}" == 0 ]] && toggle_component boot ;;
             "") break ;;
             a|A) REAPPLY=true; break ;;
             q|Q) tput cnorm 2>/dev/null; echo; return 1 ;;

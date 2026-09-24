@@ -16,8 +16,11 @@ one per merged pull request.
     it. Choosing desktop turns the conversion on; turning the conversion off
     resets it to gamescope.
   - The later menu items move down one (BIOS is now 8 on a Steam Machine).
-- **feat: "Boot into" is a sub-option of the conversion**
+- `4895de3` **feat: "Boot into" is a sub-option of the conversion**
   - Shown indented under the SteamOS conversion, and only while it's ticked.
+- **feat: Left/Right arrows choose on the "Boot into" row**
+  - Left = gamescope, right = desktop (Space still switches); the row says
+    "←/→ choose" and the key help lists Left/Right.
 
 ## 0.9.1 - 2026-09-24 (#10)
 
