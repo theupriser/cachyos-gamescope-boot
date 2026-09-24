@@ -76,7 +76,7 @@ run_menu() {
 draw_menu_tui() {
     local cursor="$1" i=0 c box state line
     printf '\033[H\033[2J'
-    echo -e "${c_bold}CachyOS Steam Deck-style Gamescope Boot Wizard${c_reset}"
+    echo -e "${c_bold}CachyOS Steam Deck-style Gamescope Boot Wizard${c_reset} v$VERSION"
     echo "Pick what you want. Anything you untick is put back the way it was."
     echo
     MENU_ITEMS=()

@@ -58,6 +58,10 @@ gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
 - Comments explain *why* (the CachyOS/Plasma quirk being worked around),
   not what the next line does.
 
+- **Versioning.** SemVer in `VERSION` (`setup-gamescope-boot.sh`, shown in
+  the menu header and the bundle). Every commit gets an entry in
+  `CHANGELOG.md` under its version; a new PR/branch bumps the version.
+
 ## Non-obvious behaviour to preserve
 
 - `apply_changes` sets `$LOGIN_MANAGER` from the menu: `sddm` when single
@@ -80,11 +84,21 @@ gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
 - The Steam desktop autostart unit is guarded with
   `ExecCondition=... XDG_CURRENT_DESKTOP = KDE`, so it doesn't start a
   second Steam inside gamescope.
-- Vapor theme: install Valve's files as shipped. Don't rewrite Valve's
-  `metadata.json`; the icon theme is `breeze-dark` (there is no "Vapor"
-  icon theme); wallpapers are flat JPGs in `usr/share/wallpapers`.
-  `lookandfeeltool` does not switch the color scheme, so
-  `plasma-apply-colorscheme Vapor` is applied explicitly.
+- Vapor theme: comes from the `cachyos-vapor` package (system-wide, in
+  `/usr/share`); only remove it on disable if we installed it. It is applied
+  with `lookandfeeltool --resetLayout` ("Desktop and window layout"), which
+  replaces the panel/desktop layout: the layout files are backed up to
+  `$STATE_DIR/theme-layout` and restored, and every key from Vapor's
+  `contents/defaults` goes through `kset` first. `plasma-apply-colorscheme`
+  runs with the `ColorScheme` key cleared, since it skips a scheme already
+  named there. The layout reset drops single user's launcher settings, so
+  `single_launcher` is re-applied.
+- SteamOS extras (`lib/steamos-extras.sh`, part of the theme): downloaded from
+  Valve's newest `steamdeck-kde-presets` (repo db gives name + SHA-256) into
+  `/usr/local`, never `/usr`. `gaming-return.svg` is a symlink in the package:
+  install `steam-gaming-return.svg` under that name. The shortcut's icon is
+  switched with `set_shortcut_icon`, since the conversion is created before
+  the theme. An existing KWallet is never replaced or removed.
 - Plasma 6 has no separate systemtray containment: tray settings live on
   the systemtray applet itself (Valve's setup script targets Plasma 5).
 - Restart plasmashell via `systemctl --user` (`plasma-plasmashell.service`),
@@ -97,8 +111,13 @@ gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
   wallpaper files only between `stop_plasmashell_for_edit` and
   `restart_plasmashell_if_stopped` (`lib/common.sh`).
 - LED driver: `leds-valve-dkms-git`'s Makefile builds against `uname -r`,
-  so the script builds explicitly for the running kernel and installs
-  headers for every installed kernel first. The module creates
+  not DKMS's target kernel: `/etc/dkms/leds-valve-dkms.conf` sets
+  `MAKE[0]="make KVERSION=${kernelver}"` (written before the AUR install).
+  Without it, other kernels build against the running kernel's tree and
+  fail (CachyOS kernels are clang-built; DKMS adds `LLVM=1` only for the
+  target's tree). Headers for every installed kernel are installed first,
+  and `ensure-kernel-headers.service` installs missing ones at boot (a
+  pacman hook can't run pacman), which triggers DKMS's install hook. The module creates
   `/sys/class/leds/valve-leds*`.
 - `Relogin=true` means a gamescope that fails to start is relaunched in a
   tight loop; keep that in mind when changing session handling.

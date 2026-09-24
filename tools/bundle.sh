@@ -17,7 +17,7 @@ mkdir -p "$(dirname "$out")"
 libs=$(grep -oP '^for lib in \K.*(?=; do$)' "$entry")
 [[ -n "$libs" ]] || { echo "bundle: can't find the lib source loop in $entry" >&2; exit 1; }
 
-version="$(git describe --always --dirty 2>/dev/null || echo unknown)"
+version="v$(grep -oP '^VERSION=\K.*' "$entry"), $(git describe --always --dirty 2>/dev/null || echo unknown)"
 
 {
     # Header comment and `set` line of the entry point, up to the source loop.
