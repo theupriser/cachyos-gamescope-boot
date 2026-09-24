@@ -1,4 +1,4 @@
-# CachyOS Gamescope Boot Wizard
+# Steamify CachyOS
 
 Turn a CachyOS desktop PC into a SteamOS-style console: it boots straight
 into Steam's Big Picture (gamescope), and you can switch to the KDE Plasma
@@ -6,8 +6,9 @@ desktop and back whenever you like - just like on a Steam Deck or Valve's
 Steam Machine.
 
 Out of the box, CachyOS doesn't quite manage this: the switch to the desktop
-can hang, and the PC doesn't reliably boot back into gaming mode. This
-script fixes that and sets everything up for you.
+can hang, and the PC doesn't reliably boot back into gaming mode. Steamify
+fixes that and sets everything up for you. (The repository is still called
+`cachyos-gamescope-boot`.)
 
 ## What you get
 
@@ -24,9 +25,9 @@ Everything you turn off is put back the way it was.
 4. **Single user mode** - like SteamOS: never a login or lock screen, no
    user switching or logging out. Typing a password with a controller is no
    fun. (Needs 1.)
-5. **Wizard shortcut** - a "SteamOS Setup Wizard" icon on the desktop and in
+5. **Steamify shortcut** - a "Steamify CachyOS" icon on the desktop and in
    the app launcher (the Steam logo with a gear) that opens the newest version
-   of this wizard in Konsole, so you don't need the install command again.
+   of Steamify in Konsole, so you don't need the install command again.
 6. **Steam Machine support** - only shown on a Valve Steam Machine: the
    driver for the front LED bar, and the hardware settings in Steam (fan,
    TV control over HDMI-CEC).
@@ -362,7 +363,7 @@ gamescope-session, ...) stay installed.
 | `lib/vapor-theme.sh` | SteamOS theme: installs and switches to `cachyos-vapor` |
 | `lib/steamos-extras.sh` | SteamOS desktop extras from Valve's package (Add to Steam, Nested Desktop, icon, keyboard rule, KWallet) |
 | `lib/single-user.sh` | Single user mode: no lock screen, user switching or log out |
-| `lib/wizard-shortcut.sh` | Wizard shortcut: desktop icon and launcher entry that run the newest release |
+| `lib/wizard-shortcut.sh` | Steamify shortcut: desktop icon and launcher entry that run the newest release |
 | `lib/bios.sh` | Update BIOS (Steam Machine, opt-in): current/newest version, double confirmation, fwupd |
 | `lib/steam-machine.sh` | Steam Machine support: LED driver, LED access, steamos-manager |
 | `.github/tools/bundle.sh` | Builds the single-file version (`dist/setup-gamescope-boot.sh`) |

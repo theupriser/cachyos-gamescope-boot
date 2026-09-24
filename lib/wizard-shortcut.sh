@@ -1,6 +1,6 @@
 #!/bin/bash
-# "Wizard shortcut" menu item: a desktop icon and an app launcher entry that
-# open the newest release of this wizard in Konsole (curl | bash, like the
+# "Steamify shortcut" menu item: a desktop icon and an app launcher entry that
+# open the newest release of Steamify CachyOS in Konsole (curl | bash, like the
 # install command in the README), so it's never out of date.
 # Sourced by setup-gamescope-boot.sh; not meant to be run on its own.
 
@@ -33,10 +33,10 @@ launcher_status() {
 }
 
 launcher_enable() {
-    info "Adding the wizard shortcut (desktop icon and app launcher entry)..."
+    info "Adding the Steamify shortcut (desktop icon and app launcher entry)..."
     install_executable "$WIZARD_LAUNCHER" 755 << EOF
 #!/bin/bash
-# Installed by cachyos-gamescope-boot: run the newest release of the wizard.
+# Installed by Steamify CachyOS: run its newest release.
 if ! curl -fsSL --max-time 30 "$WIZARD_URL" | bash; then
     echo
     echo "Couldn't download or run the wizard. Are you connected to the internet?"
@@ -60,21 +60,21 @@ EOF
     local entry
     entry="[Desktop Entry]
 Type=Application
-Name=SteamOS Setup Wizard
-Comment=Turn the SteamOS-style parts of this PC on or off (cachyos-gamescope-boot)
+Name=Steamify CachyOS
+Comment=Turn the SteamOS-style parts of this PC on or off
 Exec=konsole -e $WIZARD_LAUNCHER
 Icon=$icon
 Terminal=false
-Categories=System;Settings;"
+Categories=Game;System;Settings;"
     printf '%s\n' "$entry" | install_executable "$WIZARD_APP_ENTRY" 644
     printf '%s\n' "$entry" | install_executable "$(wizard_desktop_file)" 755
     kbuildsycoca6 >/dev/null 2>&1 || true
-    ok "Wizard shortcut added: \"SteamOS Setup Wizard\" on the desktop and in the launcher."
+    ok "Steamify shortcut added: \"Steamify CachyOS\" on the desktop and in the launcher."
 }
 
 launcher_disable() {
     rm -f "$(wizard_desktop_file)" "$WIZARD_APP_ENTRY" "$WIZARD_LAUNCHER" "$WIZARD_ICON"
     rmdir "$(dirname "$WIZARD_LAUNCHER")" 2>/dev/null || true
     kbuildsycoca6 >/dev/null 2>&1 || true
-    ok "Wizard shortcut removed."
+    ok "Steamify shortcut removed."
 }

@@ -5,7 +5,7 @@ for what the script does from a user's point of view.
 
 ## Project overview
 
-A bash wizard that makes CachyOS (KDE Plasma 6 + `plasma-login-manager`)
+**Steamify CachyOS** (repository `cachyos-gamescope-boot`): a bash wizard that makes CachyOS (KDE Plasma 6 + `plasma-login-manager`)
 boot into a SteamOS-style gamescope session, with working switching between
 gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
 (DMI `Valve`/`Fremont`) running CachyOS Desktop edition.
@@ -149,7 +149,7 @@ gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
 - The entry point loops: menu, run, "back to the menu" (or `[m]`/`[r]` when a
   restart is needed), until `q`; the restart question is asked once at the
   end. Scripted input that runs out ends the loop like `q`.
-- Wizard shortcut (`launcher`): the icon runs `curl | bash` of
+- Steamify shortcut (`launcher`): the icon runs `curl | bash` of
   `releases/latest/download/setup-gamescope-boot.sh` in Konsole, so it's
   always the newest release. Its icon, `assets/steam-gaming-settings.svg`
   (Valve's GPL-2.0 return icon with a gear), is a release asset too, and is

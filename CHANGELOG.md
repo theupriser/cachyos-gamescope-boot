@@ -7,14 +7,21 @@ one per merged pull request.
 
 ## 0.9.0 - 2026-09-24
 
-- **feat: Wizard shortcut on the desktop and in the launcher**
-  - New menu item: a "SteamOS Setup Wizard" desktop icon and app launcher entry
+The wizard is now called **Steamify CachyOS**, and can put a shortcut to
+itself on the desktop.
+
+- `f01aa93` **feat: Wizard shortcut on the desktop and in the launcher**
+  - New menu item: a desktop icon and app launcher entry
     that open the newest release of the wizard in Konsole (`curl | bash`).
   - Its icon: Valve's Return to Gaming Mode icon with a gear instead of the
     arrow (`assets/steam-gaming-settings.svg`), published with every release
     and downloaded from there.
   - Desktop files are written already executable, so Plasma runs them instead
     of opening them in an editor.
+- **feat: Rename to Steamify CachyOS**
+  - Menu header, the shortcut ("Steamify CachyOS", menu item "Steamify
+    shortcut"), release titles, README and AGENTS.md. The repository, script
+    and download URLs keep the name `cachyos-gamescope-boot`.
 
 ## 0.8.0 - 2026-09-24 (#8)
 
