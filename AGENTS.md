@@ -132,10 +132,32 @@ gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
   and `ensure-kernel-headers.service` installs missing ones at boot (a
   pacman hook can't run pacman), which triggers DKMS's install hook. The module creates
   `/sys/class/leds/valve-leds*`.
+- `bios` is an *action* (`ACTIONS` in `lib/menu.sh`), not an on/off
+  component: never preselected (not even on a first run), never re-applied
+  by `a`, not listed in the state overview, and `bios_status` is always off.
+  Only selectable when Valve's version differs from the installed one
+  (`component_selectable`, greyed out otherwise). Download, SHA-256 and the
+  fwupd device check (`get-details --json`: no `UpdateError`) come before the
+  warnings. The warning box uses `█` for its frame: Konsole draws a long
+  coloured row of `#` narrower, so the right edge wouldn't line up.
+  Keep both confirmations (y/N, then typing `UPDATE`) and the warnings; the
+  firmware comes from the newest `holo-X.Y` repo (`.files` db names the
+  `.cab`, `.db` gives the SHA-256), and fwupd itself refuses non-Fremont
+  hardware. In the VM, test it with `WIZARD_BIOS_DRY_RUN=1` (skips only the
+  device check, never flashes) and a faked version (dev-env
+  `BIOS_VERSION=F7F0107 ./run.sh --fremont`).
+- The entry point loops: menu, run, "back to the menu" (or `[m]`/`[r]` when a
+  restart is needed), until `q`; the restart question is asked once at the
+  end. Scripted input that runs out ends the loop like `q`.
 - `Relogin=true` means a gamescope that fails to start is relaunched in a
   tight loop; keep that in mind when changing session handling.
 
 ## Checking changes
+
+The bundle puts every module in one file, so shellcheck sees all their
+`local` variables together: don't reuse a name another module uses as an
+array (e.g. `g` in `lib/state.sh`), or CI's shellcheck on the bundle fails.
+
 
 There is no test suite. At minimum:
 

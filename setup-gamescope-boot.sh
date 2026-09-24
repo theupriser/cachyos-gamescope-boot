@@ -15,11 +15,11 @@
 set -uo pipefail
 
 # Release version, see CHANGELOG.md.
-VERSION=0.7.0
+VERSION=0.8.0
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-for lib in common state packages login-manager single-user steam-desktop steam-machine vapor-theme steamos-extras desktop-shortcut menu; do
+for lib in common state packages login-manager single-user steam-desktop steam-machine vapor-theme steamos-extras bios desktop-shortcut menu; do
     # shellcheck source=/dev/null
     source "$SCRIPT_DIR/lib/$lib.sh"
 done
@@ -39,47 +39,112 @@ fi
 # user running the script.
 TARGET_USER="$(id -un)"
 
-detect_components
-run_menu || { info "Nothing changed."; exit 0; }
-plan_changes
+restart_needed() { [[ -n "${BIOS_NEEDS_RESTART:-}" || "$RESTART_FOR_LOGIN" == true ]]; }
 
-if [[ ${#TO_DISABLE[@]} -eq 0 && ${#TO_ENABLE[@]} -eq 0 ]]; then
-    ok "Everything is already the way you want it."
+restart_now() {
+    if [[ -n "${BIOS_NEEDS_RESTART:-}" ]]; then
+        warn "The BIOS update is written during this restart. Keep the power on and don't"
+        warn "touch the machine until it has fully started again, even if the screen stays black."
+    fi
+    if [[ -n "${BIOS_DRY_RUN:-}" ]]; then
+        ok "Dry run: would restart now (sudo reboot); not restarting."
+        exit 0
+    fi
+    info "Restarting..."
+    sudo reboot
     exit 0
-fi
+}
 
-echo
-echo -e "${c_bold}This will:${c_reset}"
-for c in "${TO_DISABLE[@]}"; do echo "  - turn off: ${LABEL[$c]}"; done
-for c in "${TO_ENABLE[@]}"; do
-    if [[ "${CURRENT[$c]}" == 1 ]]; then echo "  - re-apply: ${LABEL[$c]}"; else echo "  - turn on:  ${LABEL[$c]}"; fi
+after_run() {
+    # After a run: back to the menu, or restart right away when something
+    # that just ran needs it. Returns 1 when input has ended (scripted runs).
+    local reply
+    if ! restart_needed; then
+        read -rp "Press Enter to go back to the menu... " _ || return 1
+        return 0
+    fi
+    if [[ -n "${BIOS_NEEDS_RESTART:-}" ]]; then
+        warn "The BIOS update is installed at the next restart."
+    else
+        info "The login changes take effect after a restart."
+    fi
+    while true; do
+        read -rp "$(echo -e "${c_bold}[m]${c_reset} back to the menu   ${c_bold}[r]${c_reset} restart now: ")" reply || return 1
+        case "$reply" in
+            m|M|"") return 0 ;;
+            r|R) restart_now ;;
+            *) warn "Type m or r." ;;
+        esac
+    done
+}
+
+# Menu loop: after each run the menu comes back with the new state, until
+# the user quits; the restart question comes then, once, for everything.
+RESTART_FOR_LOGIN=false
+SUDO_KEEPALIVE=false
+while true; do
+    detect_components
+    run_menu || break
+    plan_changes
+
+    if [[ ${#TO_DISABLE[@]} -eq 0 && ${#TO_ENABLE[@]} -eq 0 ]]; then
+        ok "Everything is already the way you want it."
+        read -rp "Press Enter to go back to the menu... " _ || break
+        continue
+    fi
+
+    echo
+    echo -e "${c_bold}This will:${c_reset}"
+    for c in "${TO_DISABLE[@]}"; do echo "  - turn off: ${LABEL[$c]}"; done
+    for c in "${TO_ENABLE[@]}"; do
+        if is_action "$c"; then echo "  - run:      ${LABEL[$c]%%:*} at your own risk (checks, then asks twice more)"
+        elif [[ "${CURRENT[$c]}" == 1 ]]; then echo "  - re-apply: ${LABEL[$c]}"; else echo "  - turn on:  ${LABEL[$c]}"; fi
+    done
+    ask_yn "Go ahead?" y || { info "Nothing changed."; continue; }
+
+    # Ask for the sudo password once and keep it fresh, instead of prompting
+    # at random points during the run.
+    sudo -n true 2>/dev/null || sudo -v || exit 1
+    if [[ "$SUDO_KEEPALIVE" == false ]]; then
+        SUDO_KEEPALIVE=true
+        while true; do sudo -n true; sleep 50; kill -0 "$$" 2>/dev/null || exit; done 2>/dev/null &
+    fi
+
+    apply_changes
+    # Login manager changes only take effect after a restart.
+    [[ " ${TO_DISABLE[*]} ${TO_ENABLE[*]} " == *" gaming "* || " ${TO_DISABLE[*]} ${TO_ENABLE[*]} " == *" single "* ]] &&
+        RESTART_FOR_LOGIN=true
+
+    echo
+    detect_components
+    echo -e "${c_bold}Done. Current state:${c_reset}"
+    for c in "${COMPONENTS[@]}"; do
+        component_available "$c" && ! is_action "$c" || continue
+        if [[ "${CURRENT[$c]}" == 1 ]]; then echo -e "  ${c_green}on ${c_reset} ${LABEL[$c]}"; else echo "  off  ${LABEL[$c]}"; fi
+    done
+    if [[ ${#FAILED[@]} -gt 0 ]]; then
+        warn "These had problems (see above): ${FAILED[*]}"
+    fi
+    echo
+    after_run || break
 done
-ask_yn "Go ahead?" y || { info "Nothing changed."; exit 0; }
-
-# Ask for the sudo password once and keep it fresh, instead of prompting at
-# random points during the run.
-sudo -n true 2>/dev/null || sudo -v || exit 1
-while true; do sudo -n true; sleep 50; kill -0 "$$" 2>/dev/null || exit; done 2>/dev/null &
-
-apply_changes
-
-echo
-detect_components
-echo -e "${c_bold}Done. Current state:${c_reset}"
-for c in "${COMPONENTS[@]}"; do
-    component_available "$c" || continue
-    if [[ "${CURRENT[$c]}" == 1 ]]; then echo -e "  ${c_green}on ${c_reset} ${LABEL[$c]}"; else echo "  off  ${LABEL[$c]}"; fi
-done
-if [[ ${#FAILED[@]} -gt 0 ]]; then
-    warn "These had problems (see above): ${FAILED[*]}"
-fi
 echo
 
-# Login manager changes only take effect after a restart.
-if [[ " ${TO_DISABLE[*]} ${TO_ENABLE[*]} " == *" gaming "* || " ${TO_DISABLE[*]} ${TO_ENABLE[*]} " == *" single "* ]]; then
+# A staged BIOS update is written during the restart.
+if [[ -n "${BIOS_NEEDS_RESTART:-}" ]]; then
+    warn "The BIOS update is written during the next restart. Keep the power on and"
+    warn "don't touch the machine until it has fully started again, even if the screen stays black."
+    if ask_yn "Restart now to install the BIOS update?" n; then
+        restart_now
+    else
+        info "The BIOS update installs at your next restart."
+    fi
+elif [[ "$RESTART_FOR_LOGIN" == true ]]; then
     if ask_yn "Restart now so the changes take effect?" n; then
-        sudo reboot
+        restart_now
     else
         info "Restart whenever you're ready."
     fi
+else
+    info "Bye."
 fi

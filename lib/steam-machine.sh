@@ -163,7 +163,9 @@ kernel_overview() {
     local mark="${c_green}yes${c_reset}" miss="${c_red}no ${c_reset}" leds=false
     detect_valve_fremont && command -v dkms >/dev/null 2>&1 && leds=true
     local kdir k pkg headers hid led running line
-    echo -e "  ${c_bold}Kernels${c_reset} (> = running; controller = Steam controller driver, LEDs = LED bar driver built)"
+    local legend="> = running; controller = Steam controller driver"
+    [[ "$leds" == true ]] && legend+=", LEDs = LED bar driver built"
+    echo -e "  ${c_bold}Kernels${c_reset} ($legend)"
     for kdir in /usr/lib/modules/*/; do
         k="$(basename "$kdir")"
         [[ -f "$kdir/pkgbase" ]] || continue

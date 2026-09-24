@@ -2,7 +2,7 @@
 # Output helpers, prompts and small shared utilities.
 # Sourced by setup-gamescope-boot.sh; not meant to be run on its own.
 
-c_reset="\033[0m"; c_bold="\033[1m"; c_green="\033[32m"; c_yellow="\033[33m"; c_red="\033[31m"; c_cyan="\033[36m"
+c_reset="\033[0m"; c_bold="\033[1m"; c_green="\033[32m"; c_yellow="\033[33m"; c_red="\033[31m"; c_cyan="\033[36m"; c_dim="\033[2m"
 
 info()  { echo -e "${c_cyan}[INFO]${c_reset} $*"; }
 ok()    { echo -e "${c_green}[OK]${c_reset} $*"; }

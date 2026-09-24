@@ -5,7 +5,10 @@
 
 # Menu order. Components are turned on in this order and off in reverse;
 # gaming must come first (single user builds on it).
-COMPONENTS=(gaming theme glyphs single machine)
+COMPONENTS=(gaming theme glyphs single machine bios)
+# One-off actions rather than on/off components: never preselected, never
+# re-applied, not listed as on or off.
+ACTIONS=(bios)
 
 declare -A LABEL=(
     [gaming]="SteamOS conversion: boot into gaming mode, Steam on the desktop"
@@ -13,11 +16,24 @@ declare -A LABEL=(
     [glyphs]="Install Steam Deck/Machine icons: Deck button icons in gaming mode"
     [single]="Single user mode: no password, lock screen or log out (SDDM)"
     [machine]="Steam Machine support: LED bar driver, hardware settings in Steam"
+    [bios]="Update BIOS"
 )
 declare -A CURRENT WANTED
 
 component_available() {
-    [[ "$1" != machine ]] || machine_available
+    case "$1" in
+        machine) machine_available ;;
+        bios) bios_available ;;
+    esac
+}
+
+is_action() { [[ " ${ACTIONS[*]} " == *" $1 "* ]]; }
+
+component_selectable() {
+    # Greyed out and not tickable when it has nothing to do.
+    case "$1" in
+        bios) bios_selectable ;;
+    esac
 }
 
 detect_components() {
@@ -27,16 +43,19 @@ detect_components() {
         if "${c}_status"; then CURRENT[$c]=1; any=true; else CURRENT[$c]=0; fi
         WANTED[$c]=${CURRENT[$c]}
     done
-    # First run: preselect the full SteamOS experience.
+    # Shows the current and newest BIOS version.
+    bios_available && { bios_lookup_newest; LABEL[bios]="$(bios_label)"; }
+    # First run: preselect the full SteamOS experience (never an action).
     if [[ "$any" == false ]]; then
         for c in "${COMPONENTS[@]}"; do
-            component_available "$c" && WANTED[$c]=1
+            component_available "$c" && ! is_action "$c" && WANTED[$c]=1
         done
     fi
 }
 
 toggle_component() {
     local c="$1"
+    component_selectable "$c" || return 1
     WANTED[$c]=$(( 1 - WANTED[$c] ))
     # Single user mode only makes sense on top of the SteamOS conversion.
     if [[ "$c" == single && "${WANTED[single]}" == 1 ]]; then WANTED[gaming]=1; fi
@@ -51,9 +70,17 @@ show_menu() {
     for c in "${COMPONENTS[@]}"; do
         component_available "$c" || continue
         i=$((i + 1)); MENU_ITEMS[$i]=$c
-        now="off"; [[ "${CURRENT[$c]}" == 1 ]] && now="${c_green}on${c_reset} "
+        # Pad the plain word, then colour it: colour codes would count as width.
+        now="off"; [[ "${CURRENT[$c]}" == 1 ]] && now="on"
+        is_action "$c" && now="-"
+        now="$(printf '%-6s' "$now")"
+        [[ "${CURRENT[$c]}" == 1 ]] && now="${now/on/${c_green}on${c_reset}}"
         want="[ ]"; [[ "${WANTED[$c]}" == 1 ]] && want="[x]"
-        printf "  %-3s %-6b %-6s %s\n" "$i" "$now  " "$want" "${LABEL[$c]}"
+        if component_selectable "$c"; then
+            printf "  %-3s %b %-6s %s\n" "$i" "$now" "$want" "${LABEL[$c]}"
+        else
+            printf "  %b%-3s %-6s %-6s %s (not available)%b\n" "$c_dim" "$i" "$now" "$want" "${LABEL[$c]}" "$c_reset"
+        fi
     done
     echo
     echo -e "$KERNEL_OVERVIEW"
@@ -84,13 +111,18 @@ draw_menu_tui() {
         component_available "$c" || continue
         MENU_ITEMS[$i]=$c
         box="[ ]"; [[ "${WANTED[$c]}" == 1 ]] && box="[${c_green}x${c_reset}]"
-        state="off"; [[ "${CURRENT[$c]}" == 1 ]] && state="${c_green}on${c_reset}"
+        state="  (now: off)"; [[ "${CURRENT[$c]}" == 1 ]] && state="  (now: ${c_green}on${c_reset})"
+        is_action "$c" && state="  (opt-in, runs once)"
         line="$box ${LABEL[$c]}"
-        if (( i == cursor )); then
+        if ! component_selectable "$c"; then
+            # Greyed out: nothing to do (e.g. BIOS already up to date).
+            local mark="   "; (( i == cursor )) && mark=" ${c_cyan}>${c_reset} "
+            echo -e "${mark}${c_dim}[ ] ${LABEL[$c]}  (not available)${c_reset}"
+        elif (( i == cursor )); then
             # The green x's reset would end the bold too: re-enable it after.
-            echo -e " ${c_cyan}>${c_reset} ${c_bold}${line//"$c_reset"/"$c_reset$c_bold"}${c_reset}  (now: ${state})"
+            echo -e " ${c_cyan}>${c_reset} ${c_bold}${line//"$c_reset"/"$c_reset$c_bold"}${c_reset}${state}"
         else
-            echo -e "   ${line}  (now: ${state})"
+            echo -e "   ${line}${state}"
         fi
         i=$((i + 1))
     done
@@ -137,7 +169,8 @@ run_menu_lines() {
             q|Q) return 1 ;;
             *)
                 if [[ "$reply" =~ ^[0-9]+$ && -n "${MENU_ITEMS[$reply]:-}" ]]; then
-                    toggle_component "${MENU_ITEMS[$reply]}"
+                    toggle_component "${MENU_ITEMS[$reply]}" ||
+                        warn "Not available: ${LABEL[${MENU_ITEMS[$reply]}]}"
                 else
                     warn "Unknown choice: $reply"
                 fi
@@ -160,6 +193,7 @@ plan_changes() {
     for c in "${COMPONENTS[@]}"; do
         component_available "$c" || continue
         [[ "${WANTED[$c]}" == 1 ]] || continue
+        if is_action "$c"; then TO_ENABLE+=("$c"); continue; fi
         if [[ "${CURRENT[$c]}" == 0 || "$REAPPLY" == true ]] ||
             [[ "$c" == gaming && "${CURRENT[single]}" != "${WANTED[single]}" ]]; then
             TO_ENABLE+=("$c")
@@ -177,7 +211,8 @@ apply_changes() {
         "${c}_disable" || failed+=("$c")
     done
     for c in "${TO_ENABLE[@]}"; do
-        echo; echo -e "${c_bold}Turning on: ${LABEL[$c]}${c_reset}"
+        if is_action "$c"; then echo; echo -e "${c_bold}Running: ${LABEL[$c]%%:*}${c_reset}"
+        else echo; echo -e "${c_bold}Turning on: ${LABEL[$c]}${c_reset}"; fi
         "${c}_enable" || failed+=("$c")
     done
     FAILED=("${failed[@]}")

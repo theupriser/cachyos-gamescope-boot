@@ -27,6 +27,9 @@ Everything you turn off is put back the way it was.
 5. **Steam Machine support** - only shown on a Valve Steam Machine: the
    driver for the front LED bar, and the hardware settings in Steam (fan,
    TV control over HDMI-CEC).
+6. **Update BIOS** - only on a Steam Machine, opt-in and at your own risk:
+   installs the newest Steam Machine BIOS from Valve (see
+   [BIOS updates](#bios-updates-steam-machine)).
 
 ## Requirements
 
@@ -73,6 +76,10 @@ Steam Machine also whether the LED bar driver is built for it, and whether
 it's loaded right now, so a kernel update is easy to check. The wizard then
 shows what it will change, asks your password once, and at the end offers
 to restart (needed for changes to how the PC starts).
+
+After each run the menu comes back with the new state, so you can change more
+in one go; quit with **q**. When something needs a restart, you choose
+between going back to the menu and restarting now; quitting asks once more.
 
 Run it again whenever you like - to change your choices, to turn things off
 again, or after a CachyOS update (press `a` in the menu to re-apply
@@ -283,17 +290,41 @@ cat /var/lib/dkms/leds-valve-dkms/0.1/build/make.log
 journalctl --user -b | grep -i led
 ```
 
-**BIOS updates** are not part of the wizard. Valve ships the Steam Machine
-BIOS as `F7F0108.cab` in its `fremont-hw-support` package for fwupd. To
-install it by hand (keep the machine on mains power and don't interrupt it):
+### BIOS updates (Steam Machine)
 
-```bash
-sudo dmidecode -s bios-version     # current version
-sudo pacman -S fwupd
-curl -LO https://steamdeck-packages.steamos.cloud/archlinux-mirror/holo-3.9/os/x86_64/fremont-hw-support-20260807.1-1-any.pkg.tar.zst
-mkdir fhw && tar -I zstd -xf fremont-hw-support-*.pkg.tar.zst -C fhw
-sudo fwupdmgr install fhw/usr/share/fwupd/remotes.d/fremont/firmware/F7F0108.cab
+The **Update BIOS** item is only shown on a Steam Machine and is never ticked
+by default. It shows the BIOS version you have now and the newest one Valve
+ships (the `.cab` file in its `fremont-hw-support` package, looked up on
+Valve's SteamOS mirror):
+
 ```
+ [ ] Update BIOS: now F7F0107, newest F7F0108 (own risk)  (opt-in, runs once)
+```
+
+It can only be ticked when Valve has a newer BIOS than yours; when you're up
+to date, when the newest version can't be looked up (offline), or when an
+update is already waiting for a restart, it's greyed out.
+
+When you run it, the wizard:
+
+1. downloads Valve's package and checks its **SHA-256** against Valve's
+   repository, so it's exactly Valve's file;
+2. asks **fwupd** whether the firmware is for this very machine (fwupd compares
+   the firmware's hardware IDs with the device) and stops if it isn't;
+3. shows a large red **warning** with the current and the new version, and asks
+   whether you understand the risks (default: no);
+4. shows the warning **again** and only continues when you type `UPDATE`;
+5. hands the firmware to fwupd, which writes it during the **next restart**:
+   choose "restart now" or restart later yourself.
+
+**At your own risk:** a failed or interrupted BIOS update can leave the machine
+unable to start. Keep it on mains power, and never turn off the power, unplug
+it or press the power button while it updates, including during the restart;
+the screen can stay black for several minutes.
+
+To walk through it without flashing anything, run the wizard with
+`WIZARD_BIOS_DRY_RUN=1`: it downloads and checks the package and shows both
+warnings, skips fwupd's device check, and only prints the install command.
 
 ### Manual session control
 
@@ -328,6 +359,7 @@ gamescope-session, ...) stay installed.
 | `lib/vapor-theme.sh` | SteamOS theme: installs and switches to `cachyos-vapor` |
 | `lib/steamos-extras.sh` | SteamOS desktop extras from Valve's package (Add to Steam, Nested Desktop, icon, keyboard rule, KWallet) |
 | `lib/single-user.sh` | Single user mode: no lock screen, user switching or log out |
+| `lib/bios.sh` | Update BIOS (Steam Machine, opt-in): current/newest version, double confirmation, fwupd |
 | `lib/steam-machine.sh` | Steam Machine support: LED driver, LED access, steamos-manager |
 | `.github/tools/bundle.sh` | Builds the single-file version (`dist/setup-gamescope-boot.sh`) |
 | `.github/workflows/bundle.yml` | Builds and checks it on every push; publishes it on `main` |
