@@ -36,9 +36,10 @@ every run. Merged together with 0.7.0, so v0.8.0 is the release that has both.
 - `45a8757` **fix: BIOS dry run also walks through the restart choices**
   - A dry run counts as staged, so `[m]`/`[r]` and the restart question on `q`
     show up; in dry-run mode restarting only prints what it would do.
-- **fix: Shorter BIOS labels so the menu fits 80 columns**
+- `429e840` **fix: Shorter BIOS labels so the menu fits 80 columns**
   - "now F7F0107, newest F7F0108 (own risk)", "F7F0108 waits for a restart",
     "F7F0107 is up to date"; shorter dry-run line.
+- **fix: Kernel legend only mentions the LEDs on a Steam Machine**
 
 ## 0.7.0 - 2026-09-24
 
