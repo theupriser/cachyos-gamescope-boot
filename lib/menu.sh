@@ -34,6 +34,12 @@ component_available() {
 
 is_action() { [[ " ${ACTIONS[*]} " == *" $1 "* ]]; }
 
+boot_mode() {
+    # boot_mode 0|1: the "Boot into" choice as a word, for messages; "turn
+    # off boot into the desktop" reads as the opposite of what was chosen.
+    if [[ "$1" == 1 ]]; then echo desktop; else echo gamescope; fi
+}
+
 menu_visible() {
     # Shown in the menu. "Boot into" is a sub-option of the conversion: only
     # while the conversion is ticked.
@@ -243,11 +249,13 @@ apply_changes() {
     [[ "${WANTED[single]}" == 1 ]] && LOGIN_MANAGER=sddm
 
     for c in "${TO_DISABLE[@]}"; do
-        echo; echo -e "${c_bold}Turning off: ${LABEL[$c]}${c_reset}"
+        if [[ "$c" == boot ]]; then echo; echo -e "${c_bold}Boot into: gamescope${c_reset}"
+        else echo; echo -e "${c_bold}Turning off: ${LABEL[$c]}${c_reset}"; fi
         "${c}_disable" || failed+=("$c")
     done
     for c in "${TO_ENABLE[@]}"; do
-        if is_action "$c"; then echo; echo -e "${c_bold}Running: ${LABEL[$c]%%:*}${c_reset}"
+        if [[ "$c" == boot ]]; then echo; echo -e "${c_bold}Boot into: desktop${c_reset}"
+        elif is_action "$c"; then echo; echo -e "${c_bold}Running: ${LABEL[$c]%%:*}${c_reset}"
         else echo; echo -e "${c_bold}Turning on: ${LABEL[$c]}${c_reset}"; fi
         "${c}_enable" || failed+=("$c")
     done

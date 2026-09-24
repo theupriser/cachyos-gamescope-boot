@@ -18,9 +18,13 @@ one per merged pull request.
   - The later menu items move down one (BIOS is now 8 on a Steam Machine).
 - `4895de3` **feat: "Boot into" is a sub-option of the conversion**
   - Shown indented under the SteamOS conversion, and only while it's ticked.
-- **feat: Left/Right arrows choose on the "Boot into" row**
+- `bd90e29` **feat: Left/Right arrows choose on the "Boot into" row**
   - Left = gamescope, right = desktop (Space still switches); the row says
     "←/→ choose" and the key help lists Left/Right.
+- **fix: Messages say which way it boots**
+  - "This will: boot into: gamescope (from the next boot)" instead of "turn
+    off: Boot into the desktop instead of gaming mode", and the same in the
+    progress line and the "Done" overview.
 
 ## 0.9.1 - 2026-09-24 (#10)
 
