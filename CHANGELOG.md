@@ -38,6 +38,11 @@ Machine LED driver works on every installed kernel and survives kernel updates.
 - **docs: Version 0.7.0 and CHANGELOG** (this release's docs)
   - `VERSION` in the entry point, shown in the menu header and the bundle.
   - README and AGENTS.md updated for the theme, the extras and the LED driver.
+- **ci: Version and changelog in the release notes**
+  - The `latest` release's title shows the version, and its notes include this
+    version's section of `CHANGELOG.md`.
+  - Fix a shellcheck warning in the bundle (a variable name shared with
+    `lib/state.sh`), which would have failed the CI check.
 
 ## 0.6.2 - 2026-09-23
 

@@ -92,22 +92,22 @@ extras_enable() {
 
     # Keep Steam's on-screen keyboard (Steam + X) above other windows and out
     # of the taskbar, like SteamOS's kwinrulesrc.
-    local rules g="$STEAM_KEYBOARD_RULE"
+    local rules rule="$STEAM_KEYBOARD_RULE"
     rules="$(kreadconfig6 --file kwinrulesrc --group General --key rules)"
-    if [[ ",$rules," != *",$g,"* ]]; then
-        kset theme kwinrulesrc "$g" Description "Window settings for Steam Keyboard"
-        kset theme kwinrulesrc "$g" above true
-        kset theme kwinrulesrc "$g" aboverule 2
-        kset theme kwinrulesrc "$g" skiptaskbar true
-        kset theme kwinrulesrc "$g" skiptaskbarrule 2
-        kset theme kwinrulesrc "$g" title "Steam Keyboard"
-        kset theme kwinrulesrc "$g" titlematch 2
-        kset theme kwinrulesrc "$g" type 16
-        kset theme kwinrulesrc "$g" typerule 2
-        kset theme kwinrulesrc "$g" wmclass steam
-        kset theme kwinrulesrc "$g" wmclasscomplete true
-        kset theme kwinrulesrc "$g" wmclassmatch 2
-        kset theme kwinrulesrc General rules "${rules:+$rules,}$g"
+    if [[ ",$rules," != *",$rule,"* ]]; then
+        kset theme kwinrulesrc "$rule" Description "Window settings for Steam Keyboard"
+        kset theme kwinrulesrc "$rule" above true
+        kset theme kwinrulesrc "$rule" aboverule 2
+        kset theme kwinrulesrc "$rule" skiptaskbar true
+        kset theme kwinrulesrc "$rule" skiptaskbarrule 2
+        kset theme kwinrulesrc "$rule" title "Steam Keyboard"
+        kset theme kwinrulesrc "$rule" titlematch 2
+        kset theme kwinrulesrc "$rule" type 16
+        kset theme kwinrulesrc "$rule" typerule 2
+        kset theme kwinrulesrc "$rule" wmclass steam
+        kset theme kwinrulesrc "$rule" wmclasscomplete true
+        kset theme kwinrulesrc "$rule" wmclassmatch 2
+        kset theme kwinrulesrc General rules "${rules:+$rules,}$rule"
         kset theme kwinrulesrc General count "$(( $(kreadconfig6 --file kwinrulesrc --group General --key count --default 0) + 1 ))"
         qdbus6 org.kde.KWin /KWin org.kde.KWin.reconfigure >/dev/null 2>&1 || true
     fi
