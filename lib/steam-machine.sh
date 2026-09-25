@@ -251,6 +251,13 @@ install_valve_led_driver() {
     # Load now, and on every boot.
     echo leds-valve | sudo tee /etc/modules-load.d/leds-valve.conf >/dev/null
 
+    # The running kernel was just replaced (the kernel pin): its modules are
+    # gone, so the driver can only load after the restart.
+    if [[ ! -d "/usr/lib/modules/$(uname -r)/kernel" ]]; then
+        ok "The LED driver loads after the restart (into the new kernel)."
+        return 0
+    fi
+
     info "Loading the leds-valve kernel module..."
     if sudo modprobe leds-valve; then
         ok "Module loaded."

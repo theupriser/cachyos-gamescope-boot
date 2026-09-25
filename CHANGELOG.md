@@ -10,7 +10,8 @@ one per merged pull request.
 - **perf: Pinned kernel before the LED driver**
   - With the kernel pin ticked, Steam Machine support installs kernel
     7.1.6-1 first, so DKMS builds the LED driver once, for that kernel,
-    instead of for the current kernel first and then again.
+    instead of for the current kernel first and then again. The LED driver
+    then loads after the restart, which it now says instead of warning.
 - **fix: steamos-manager starts after cecd**
   - It checks only at its start whether cecd runs; if it was first, Steam's
     HDMI-CEC settings were missing until it restarted. A drop-in
