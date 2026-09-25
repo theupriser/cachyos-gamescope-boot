@@ -5,6 +5,17 @@ All notable changes, per version and per commit. Versions follow
 `steamify.sh`. Versions before 0.7.0 were numbered afterwards,
 one per merged pull request.
 
+## 1.2.0 - 2026-09-25
+
+- **feat: HDMI refresh boost (Steam Machine, pinned kernel)**
+  - The pinned 7.1.6 kernel doesn't read the extra EDID block where monitors
+    list their fast modes, and does no HDMI 2.1, so HDMI displays often stay
+    at 60 Hz. The new menu item reads the display's EDID over DDC,
+    calculates the highest rate that fits HDMI 2.0 at the desktop resolution
+    (rounded down to ten, plus the hundred below as a safe option), tests
+    each step live with a confirmation, and makes the confirmed ones
+    permanent through `drm.edid_firmware` (Limine, sdboot-manage or GRUB).
+
 ## 1.1.4 - 2026-09-25
 
 - **fix: No lock screen in single user mode before a restart**

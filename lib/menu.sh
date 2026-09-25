@@ -5,7 +5,7 @@
 
 # Menu order. Components are turned on in this order and off in reverse;
 # gaming must come first (single user builds on it).
-COMPONENTS=(gaming boot theme glyphs single launcher cec machine kpin bios)
+COMPONENTS=(gaming boot theme glyphs single launcher cec machine kpin hdmi bios)
 # One-off actions rather than on/off components: never preselected, never
 # re-applied, not listed as on or off.
 ACTIONS=(bios)
@@ -14,8 +14,9 @@ declare -A PARENT=([boot]=gaming [kpin]=machine)
 # Never preselected on a first run: booting into the desktop is a choice,
 # gamescope is the default; HDMI-CEC is opt-in (it can wake the machine or
 # upset other devices on the TV, even on SteamOS), except on a Steam Machine,
-# which has CEC like on SteamOS.
-NO_PRESELECT=(boot cec)
+# which has CEC like on SteamOS. HDMI refresh boost needs someone at the
+# screen to confirm each step.
+NO_PRESELECT=(boot cec hdmi)
 
 declare -A LABEL=(
     [gaming]="SteamOS conversion: boot into gaming mode, Steam on the desktop"
@@ -27,6 +28,7 @@ declare -A LABEL=(
     [cec]="HDMI-CEC: use Steam with the TV remote, TV on/off with the PC (experimental)"
     [machine]="Steam Machine support: LED bar driver, hardware settings in Steam"
     [kpin]="Pin the kernel to $PINNED_KERNEL_VER (fixes rebooting after shutdown)"
+    [hdmi]="HDMI refresh boost: highest refresh your HDMI display runs"
     [bios]="Update BIOS"
 )
 declare -A CURRENT WANTED
@@ -34,6 +36,7 @@ declare -A CURRENT WANTED
 component_available() {
     case "$1" in
         machine|kpin) machine_available ;;
+        hdmi) hdmi_available ;;
         bios) bios_available ;;
     esac
 }
