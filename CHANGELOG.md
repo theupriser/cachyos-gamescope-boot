@@ -5,7 +5,7 @@ All notable changes, per version and per commit. Versions follow
 `steamify.sh`. Versions before 0.7.0 were numbered afterwards,
 one per merged pull request.
 
-## 0.11.0 - 2026-09-25
+## 1.0.0 - 2026-09-25
 
 - **feat: Pin the kernel to 7.1.6-1 on a Steam Machine**
   - New sub-option under Steam Machine support, ticked along with it (opt
