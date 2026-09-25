@@ -95,6 +95,7 @@ ApplicationWindow {
     property string sessionPassword: ""      // kept between the BIOS steps only
     property var biosInfo: ({})
     property bool biosRun: false
+    property bool biosChecking: false        // the invisible check before the warnings
     property int biosFocus: 0                // warning 1: 0 = Cancel, 1 = continue
     property real holdProgress: 0            // warning 2: hold A/OK for 5 s
     property bool holding: false
@@ -192,7 +193,14 @@ ApplicationWindow {
         var s = {}; s.bios = "wait"; steps = s;
         biosRun = true; screen = "applying";
     }
-    function biosCheck() { biosStep("check"); backend.biosPrepare(sessionPassword); }
+    function biosCheck() {
+        // Invisible: stay on the menu (the BIOS row says "Checking…"),
+        // then the first warning.
+        failed = []; runError = ""; logModel.clear();
+        plan = [{ id: "bios", action: "check" }];
+        biosRun = true; biosChecking = true; screen = "menu";
+        backend.biosPrepare(sessionPassword);
+    }
     function biosCancel() { sessionPassword = ""; holdProgress = 0; holding = false; biosRun = false; syncFromStatus(); screen = "menu"; }
     function biosFlash() { holdProgress = 0; holding = false; biosStep("flash"); backend.biosFlash(sessionPassword); }
     Timer {
@@ -206,7 +214,14 @@ ApplicationWindow {
             if (ev.event === "start") { s[ev.id] = "run"; steps = s; }
             else if (ev.event === "done") { s[ev.id] = ev.ok ? "ok" : "fail"; steps = s; doneCount++; }
             else if (ev.event === "log") { logModel.append({ line: ev.line }); if (logModel.count > 400) logModel.remove(0); }
-            else if (ev.event === "bios-ready") { biosInfo = ev; biosFocus = 0; holdProgress = 0; screen = "bios1"; }
+            else if (ev.event === "bios-ready") { biosChecking = false; biosInfo = ev; biosFocus = 0; holdProgress = 0; screen = "bios1"; }
+            else if (ev.event === "finished" && biosChecking) {
+                // The check found nothing to do or a problem: say so.
+                biosChecking = false; sessionPassword = "";
+                failed = ev.failed || []; restartNeeded = false;
+                runError = ev.error === "wrong-password" ? "The password didn't work." : (ev.error ? "sudo isn't available." : (ev.nothing ? "The BIOS is already the newest version." : ""));
+                screen = "done";
+            }
             else if (ev.event === "finished") {
                 if (!(biosRun && plan.length && plan[0].action === "check" && !ev.failed.length && !ev.error && !ev.nothing)) sessionPassword = "";
                 failed = ev.failed || []; restartNeeded = !!ev.restart;
@@ -219,6 +234,7 @@ ApplicationWindow {
 
     // --- Input: one set of actions for controller, keyboard and remote ---
     function act(a) {
+        if (screen === "menu" && biosChecking) return;
         if (screen === "menu") {
             if (a === "up") sel = Math.max(0, sel - 1);
             else if (a === "down") sel = Math.min(rows.length, sel + 1);
@@ -453,7 +469,7 @@ ApplicationWindow {
                                     // action
                                     Rectangle { visible: row.modelData.kind === "action"; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                                         width: at.implicitWidth + 24; height: 30; radius: 8; color: t.warnBg
-                                        Text { id: at; anchors.centerIn: parent; text: bios && bios.selectable ? "Update…" : (bios && bios.newest ? "Up to date" : "Unavailable"); color: t.warn; font.family: t.body; font.pixelSize: 13; font.weight: Font.DemiBold } }
+                                        Text { id: at; anchors.centerIn: parent; text: biosChecking ? "Checking…" : bios && bios.selectable ? "Update…" : (bios && bios.newest ? "Up to date" : "Unavailable"); color: t.warn; font.family: t.body; font.pixelSize: 13; font.weight: Font.DemiBold } }
                                 }
                             }
                         }
@@ -533,7 +549,8 @@ ApplicationWindow {
                     model: plan
                     Rectangle { required property var modelData; width: 740; height: 56; radius: 12; color: t.card
                         readonly property var st: ({ on: ["Turn on", t.good, t.goodBg], off: ["Turn off", t.bad, t.badBg], again: ["Re-apply", "#7cc4ff", "#1b2b40"],
-                                                     desktop: ["Desktop", "#7cc4ff", "#1b2b40"], gaming: ["Gaming", "#7cc4ff", "#1b2b40"] })[modelData.action]
+                                                     desktop: ["Desktop", "#7cc4ff", "#1b2b40"], gaming: ["Gaming", "#7cc4ff", "#1b2b40"],
+                                                     check: ["Check", t.warn, t.warnBg], flash: ["Flash", t.bad, t.badBg] })[modelData.action] || ["", t.text, t.card]
                         Row { anchors.fill: parent; anchors.leftMargin: 18; spacing: 14
                             Chip { text: parent.parent.st[0]; fg: parent.parent.st[1]; bgc: parent.parent.st[2]; width: 84; anchors.verticalCenter: parent.verticalCenter }
                             Text { text: (texts[parent.parent.modelData.id] || {}).label || parent.parent.modelData.id; color: t.textHi; font.family: t.body; font.pixelSize: 17; font.weight: Font.DemiBold; anchors.verticalCenter: parent.verticalCenter }
@@ -716,7 +733,7 @@ ApplicationWindow {
                 Rectangle { width: 72; height: 72; radius: 36; anchors.horizontalCenter: parent.horizontalCenter
                     color: failed.length || runError ? t.warnBg : t.goodBg
                     Text { anchors.centerIn: parent; text: failed.length || runError ? "!" : "✓"; color: failed.length || runError ? t.warn : t.good; font.pixelSize: 36; font.weight: Font.Bold } }
-                Text { text: runError ? "Nothing changed" : (failed.length ? "Done, with a problem" : "All done"); color: t.text; font.family: t.display; font.pixelSize: 40; font.weight: Font.DemiBold; anchors.horizontalCenter: parent.horizontalCenter }
+                Text { text: runError ? "Nothing changed" : (biosRun && failed.length ? "The BIOS update stopped" : (failed.length ? "Done, with a problem" : "All done")); color: t.text; font.family: t.display; font.pixelSize: 40; font.weight: Font.DemiBold; anchors.horizontalCenter: parent.horizontalCenter }
                 Text { width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; color: t.soft; font.family: t.body; font.pixelSize: 17
                        text: runError ? runError : (biosRun ? (failed.length ? "The BIOS was not changed." : (bios && bios.dryRun ? "Dry run: nothing was flashed. " : "BIOS " + (biosInfo.newest || "") + " is staged and is written during the restart. ") + (failed.length ? "" : "Keep the power on and don't touch the machine until it has fully started again, even if the screen stays black.")) : (plan.length + (plan.length === 1 ? " change" : " changes") + " applied." + (restartNeeded ? " Some take effect after a restart." : ""))) }
                 Rectangle { visible: failed.length > 0; anchors.horizontalCenter: parent.horizontalCenter; width: ft.implicitWidth + 32; height: 44; radius: 12; color: t.warnBg
