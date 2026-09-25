@@ -32,6 +32,24 @@ cat /var/lib/dkms/leds-valve-dkms/0.1/build/make.log
 journalctl --user -b | grep -i led
 ```
 
+## The TV remote does nothing (HDMI-CEC)
+
+- Turn on CEC in the TV's settings (Sony: BRAVIA Sync, Samsung: Anynet+, LG:
+  SimpLink) and, if it has one, allow the PC to control it.
+- Check that the PC has a CEC device, and that `cecd` runs:
+
+```bash
+ls /dev/cec*
+systemctl --user status cecd
+journalctl --user -u cecd -b
+cec-ctl -d /dev/cec0 -S        # the devices on the TV's CEC bus (v4l-utils)
+```
+
+No `/dev/cec*`: your PC has no CEC; a USB CEC adapter (e.g. Pulse-Eight)
+works. See [CEC.md](CEC.md). The Steam Machine wakes up again right after going
+to sleep, or other devices lose CEC? That happens on SteamOS too; turn
+HDMI-CEC off in the wizard.
+
 ## The Steam Machine still reboots when I shut it down
 
 Check that the pinned kernel is installed and running:

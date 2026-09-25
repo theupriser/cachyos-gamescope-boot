@@ -154,8 +154,9 @@ The **Steam Machine support** component, only shown on Fremont hardware
 - console-like power button: it puts the machine to sleep, and it never
   suspends by itself on mains power (the launcher's Shut Down still shuts down);
 - installs and enables `steamos-manager`, the service Steam in gaming mode
-  uses for hardware settings (fan, HDMI-CEC, performance); it recognises the
-  Steam Machine from its DMI data.
+  uses for hardware settings (fan, performance, and the HDMI-CEC settings
+  when [HDMI-CEC](#hdmi-cec) is on); it recognises the Steam Machine from its
+  DMI data.
 
 Turning it off removes all of that again (the AUR helper is kept).
 
@@ -167,6 +168,38 @@ it, DKMS rebuilds the driver whenever a kernel or its headers are installed
 or upgraded. A newly added kernel doesn't come with its headers, so
 `ensure-kernel-headers.service` checks at every boot and installs any
 missing `-headers` package, which makes DKMS build the driver for it.
+
+## HDMI-CEC
+
+The **HDMI-CEC** item (on every PC; ticked by default only on a Steam
+Machine) installs
+Valve's CEC stack from its SteamOS `holo` repository, the newest `holo-X.Y`
+on `steamdeck-packages.steamos.cloud`, each package checked against the
+SHA-256 in Valve's package index:
+
+- `cecd`, Valve's CEC daemon (a user service started with the desktop and
+  gaming mode): TV remote keys become normal key presses (arrows, Enter,
+  Back), and it turns the TV on and off with the PC;
+- `cec-audio-control`: volume of the TV or receiver;
+- `inputattach-cec-units` (with `linuxconsole` from CachyOS for
+  `inputattach`): attaches USB CEC adapters (Pulse-Eight, RainShadow).
+
+It works with any `/dev/cec*`: a GPU that has CEC on its HDMI port (the
+Steam Machine; the CachyOS kernel has DisplayPort CEC built in) or a USB
+adapter ([CEC.md](CEC.md) lists which PCs have one). The menu lists the CEC
+devices found. Also turn on CEC on the TV
+(Sony: BRAVIA Sync, Samsung: Anynet+, LG: SimpLink). On a Steam Machine
+`steamos-manager` writes cecd's settings from Steam's (wake the TV, put it to
+sleep), in `~/.config/cecd/config.d/`, and Steam shows its HDMI-CEC
+settings; the wizard restarts steamos-manager so that happens right away.
+
+It's experimental: on SteamOS itself CEC can wake the Steam Machine right
+after it goes to sleep (Samsung TVs,
+[SteamOS#2626](https://github.com/ValveSoftware/SteamOS/issues/2626)) and
+upset CEC for the TV's other devices
+([SteamOS#2817](https://github.com/ValveSoftware/SteamOS/issues/2817)).
+Turning it off removes the packages again (`linuxconsole` only if the
+wizard installed it).
 
 ## Kernel pin (Steam Machine)
 
@@ -256,6 +289,7 @@ immediately, which can turn into a loop - see
 | `lib/single-user.sh` | Single user mode: no lock screen, user switching or log out |
 | `lib/wizard-shortcut.sh` | Steamify shortcut: desktop icon and launcher entry that run the newest release |
 | `lib/bios.sh` | Update BIOS (Steam Machine, opt-in): current/newest version, double confirmation, fwupd |
+| `lib/cec.sh` | HDMI-CEC: Valve's `cecd` and friends from its `holo` repository |
 | `lib/steam-machine.sh` | Steam Machine support: LED driver, LED access, steamos-manager; kernel pin |
 | `.github/tools/bundle.sh` | Builds the single-file version (`dist/steamify.sh`) |
 | `.github/workflows/bundle.yml` | Builds and checks it on every push; publishes it on `main` |
