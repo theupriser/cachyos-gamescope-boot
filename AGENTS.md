@@ -142,7 +142,7 @@ gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
   `steam-set-session plasma.desktop` plus the plasmalogin sync bridge when it
   exists, at every boot. CachyOS's `cachyos-gamescope-autologin` still sets
   gamescope during each desktop session; the unit corrects it at boot.
-- `bios` is an *action* (`ACTIONS` in `lib/menu.sh`), not an on/off
+- `bios` is an *action* (`ACTIONS` in `lib/menu.sh`) and a sub-option of `machine`, not an on/off
   component: never preselected (not even on a first run), never re-applied
   by `a`, not listed in the state overview, and `bios_status` is always off.
   Only selectable when Valve's version differs from the installed one
@@ -171,6 +171,15 @@ gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
   The start script closes its window after a 10-second countdown on success
   and waits for Enter after an error; it uses `pipefail`, or a failed
   download would run an empty script and count as success.
+- HDMI refresh boost (`hdmi`, `lib/hdmi-refresh.sh`): a sub-option of
+  `machine` (like `kpin` and `bios`), only on Fremont with the pinned kernel
+  (stays visible while on); unticking `kpin` unticks it. It needs someone at the
+  screen: the graphical app's backend (`BACKEND=true`) must refuse it, and every step needs a "y" within 15 s
+  (`WIZARD_HDMI_CONFIRM_SECONDS` for scripted tests). debugfs is root-only
+  (glob it under sudo), and `edid_override` takes exactly `reset` with no
+  newline. Build the EDID from the DDC read, not from sysfs: a live override
+  replaces the kernel's copy. The kernel command-line value holds a path, so
+  `sed` uses `|` as its delimiter.
 - `Relogin=true` means a gamescope that fails to start is relaunched in a
   tight loop; keep that in mind when changing session handling.
 

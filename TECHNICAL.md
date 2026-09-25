@@ -229,6 +229,48 @@ into the kernel directory yourself.
 Unticking it removes the pin and runs `sudo pacman -Syu`, which brings the
 kernel back to CachyOS's current version; the files stay for next time.
 
+## HDMI refresh boost (Steam Machine)
+
+With the pinned kernel (7.1.6), HDMI displays often stay at 60 Hz. Two
+reasons:
+
+- Monitors list their fast modes in an extra EDID block, announced by the
+  HDMI Forum EEODB data block. 7.1.6 only reads the first extension block,
+  so it never sees them. Newer kernels do.
+- Their fastest modes need HDMI 2.1 (FRL). 7.1.6's amdgpu only does HDMI
+  2.0 (TMDS, at most 600 MHz), but a mode with the display's own shortest
+  blanking at a slightly lower rate often fits.
+
+The menu item (only on a Steam Machine with the pinned kernel, never
+ticked by default, run from the desktop in Konsole):
+
+1. Takes the desktop resolution from KDE (`kscreen-doctor -j`) and reads the
+   display's complete EDID over DDC (`i2ctransfer`, segment pointer 0x30).
+   A live EDID left by an earlier test is cleared first.
+2. Calculates the highest rate that fits: the display's TMDS limit (HDMI
+   Forum VSDB, capped at amdgpu's 600 MHz), its shortest blanking at that
+   resolution and its maximum refresh (range limits, VRR maximum). Steps:
+   that rate rounded down to ten, and the hundred below it as a safe option.
+   Rates the display already lists, or that aren't faster than what works
+   now, are left out.
+3. Builds the EDID: all of the display's blocks, the block count and EEODB
+   fixed, plus a DisplayID block with the steps.
+4. Loads it live (debugfs `edid_override`, `trigger_hotplug`) and switches
+   to each step, lowest first. Each one needs a "y" within 15 s
+   (`WIZARD_HDMI_CONFIRM_SECONDS` for tests); anything else switches back
+   and stops.
+5. Makes it permanent with only the confirmed steps:
+   `/usr/lib/firmware/edid/steamify-<connector>.bin`, in the initramfs via
+   `/etc/mkinitcpio.conf.d/90-steamify-edid.conf` (amdgpu loads from there),
+   and `drm.edid_firmware=<connector>:edid/steamify-<connector>.bin` on the
+   kernel command line: `/etc/default/limine` (`limine-mkinitcpio`),
+   `/etc/sdboot-manage.conf` or `/etc/default/grub`.
+
+The display's manufacturer, model and serial are stored; re-applying with
+another display connected tests that one instead. Turning it off removes
+the files and the parameter and rebuilds. Untick it before removing the
+kernel pin: newer kernels read the EDID themselves and can do HDMI 2.1.
+
 ## BIOS updates (Steam Machine)
 
 The **Update BIOS** item is only shown on a Steam Machine and is never ticked
@@ -298,6 +340,7 @@ immediately, which can turn into a loop - see
 | `lib/bios.sh` | Update BIOS (Steam Machine, opt-in): current/newest version, double confirmation, fwupd |
 | `lib/cec.sh` | HDMI-CEC: Valve's `cecd` and friends from its `holo` repository |
 | `lib/steam-machine.sh` | Steam Machine support: LED driver, LED access, steamos-manager; kernel pin |
+| `lib/hdmi-refresh.sh` | HDMI refresh boost (Steam Machine, pinned kernel): EDID over DDC, calculated steps, live test, `drm.edid_firmware` |
 | `.github/tools/bundle.sh` | Builds the single-file version (`dist/steamify.sh`) |
 | `.github/workflows/bundle.yml` | Builds and checks it on every push; publishes it on `main` |
 
