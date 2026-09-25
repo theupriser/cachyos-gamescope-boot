@@ -8,7 +8,9 @@
 #       turns on the listed components and off the others (like ticking them
 #       in the menu), then streams one JSON object per line: plan, start,
 #       log, done, finished. sudo asks through $SUDO_ASKPASS (no terminal).
-# The BIOS update needs its typed confirmations: it stays in the terminal.
+#   steamify.sh --backend bios-prepare | bios-flash
+#       the BIOS update in two steps, so the app shows both warnings between
+#       them (bios-ready event: current, newest, checksum, compatible).
 # Sourced by steamify.sh; not meant to be run on its own.
 
 json_str() {
@@ -54,13 +56,17 @@ backend_status() {
     done
     local cec="" f
     for f in /dev/cec*; do [[ -e "$f" ]] && cec+="${cec:+ }$(basename "$f")"; done
-    printf '{"version":%s,"firstRun":%s,"steamMachine":%s,"kernel":%s,"pinnedKernel":%s,"cecDevices":%s,"leds":%s,"items":[%s]}\n' \
+    local bios='null'
+    if bios_available; then
+        bios="{\"current\":$(json_str "$(bios_current)"),\"newest\":$(json_str "${BIOS_NEWEST:-}"),\"selectable\":$(bios_selectable && echo true || echo false),\"dryRun\":$([[ -n "$BIOS_DRY_RUN" ]] && echo true || echo false)}"
+    fi
+    printf '{"version":%s,"firstRun":%s,"steamMachine":%s,"kernel":%s,"pinnedKernel":%s,"cecDevices":%s,"leds":%s,"bios":%s,"items":[%s]}\n' \
         "$(json_str "$VERSION")" "$first_run" \
         "$(detect_valve_fremont && echo true || echo false)" \
         "$(json_str "$(uname -r)")" "$(json_str "${PINNED_KERNEL_VER:-}")" \
         "$(json_str "$cec")" \
         "$(compgen -G '/sys/class/leds/valve-leds*' | wc -l)" \
-        "$items"
+        "$bios" "$items"
 }
 
 backend_run_component() {
@@ -75,6 +81,43 @@ backend_run_component() {
     wait $! 2>/dev/null
     backend_event done "\"id\":$(json_str "$c"),\"ok\":$([[ $rc -eq 0 ]] && echo true || echo false)"
     return $rc
+}
+
+backend_sudo() {
+    # sudo from the app has no terminal: ask through its helper, and keep the
+    # credentials fresh as the menu does.
+    if [[ -z "${SUDO_ASKPASS:-}" ]] && ! sudo -n true 2>/dev/null; then
+        backend_event finished '"failed":[],"restart":false,"error":"no-sudo"'
+        return 1
+    fi
+    sudo() { command sudo ${SUDO_ASKPASS:+-A} "$@"; }
+    if ! sudo -n true 2>/dev/null && ! sudo true 2>/dev/null; then
+        backend_event finished '"failed":[],"restart":false,"error":"wrong-password"'
+        return 1
+    fi
+    while true; do sudo -n true; sleep 50; kill -0 "$$" 2>/dev/null || exit; done 2>/dev/null &
+}
+
+backend_bios_prepare() {
+    # Download, checksum and fwupd's device check; the app then shows its
+    # two warnings and calls bios-flash.
+    local rc
+    backend_sudo || return 1
+    backend_event start '"id":"bios","action":"prepare","label":"Update BIOS"'
+    bios_prepare > >(while IFS= read -r line; do backend_event log "\"id\":\"bios\",\"line\":$(json_str "$line")"; done) 2>&1
+    rc=$?; wait $! 2>/dev/null
+    case $rc in
+        0) backend_event bios-ready "\"current\":$(json_str "$(bios_current)"),\"newest\":$(json_str "$BIOS_NEWEST"),\"checksum\":true,\"compatible\":$(json_str "$BIOS_COMPATIBLE")" ;;
+        2) backend_event finished '"failed":[],"restart":false,"nothing":true' ;;
+        *) backend_event finished '"failed":["bios"],"restart":false' ;;
+    esac
+}
+
+backend_bios_flash() {
+    backend_sudo || return 1
+    local rc
+    backend_run_component bios flash_only; rc=$?
+    backend_event finished "\"failed\":$([[ $rc -eq 0 ]] && echo '[]' || echo '["bios"]'),\"restart\":$(restart_needed && echo true || echo false),\"bios\":true"
 }
 
 backend_apply() {
@@ -111,18 +154,7 @@ backend_apply() {
         return 0
     fi
 
-    # sudo from the app has no terminal: ask through its helper, and keep the
-    # credentials fresh as the menu does.
-    if [[ -z "${SUDO_ASKPASS:-}" ]] && ! sudo -n true 2>/dev/null; then
-        backend_event finished '"failed":[],"restart":false,"error":"no-sudo"'
-        return 1
-    fi
-    sudo() { command sudo ${SUDO_ASKPASS:+-A} "$@"; }
-    if ! sudo -n true 2>/dev/null && ! sudo true 2>/dev/null; then
-        backend_event finished '"failed":[],"restart":false,"error":"wrong-password"'
-        return 1
-    fi
-    while true; do sudo -n true; sleep 50; kill -0 "$$" 2>/dev/null || exit; done 2>/dev/null &
+    backend_sudo || return 1
 
     LOGIN_MANAGER=plasmalogin
     [[ "${WANTED[single]}" == 1 ]] && LOGIN_MANAGER=sddm
@@ -137,6 +169,8 @@ backend_main() {
     case "${1:-}" in
         status) backend_status ;;
         apply) shift; backend_apply "$@" ;;
+        bios-prepare) backend_bios_prepare ;;
+        bios-flash) backend_bios_flash ;;
         *) err "Usage: steamify.sh --backend status | apply [--reapply] [--boot gamescope|desktop] <id>..."; return 2 ;;
     esac
 }

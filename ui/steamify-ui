@@ -81,7 +81,8 @@ def controller_devices():
 
 
 class Gamepad(QObject):
-    """Emits button("a"|"b"|"x"|"y"|"up"|...) from any controller."""
+    """Emits button("a"|"b"|"x"|"y"|"up"|...) from any controller, and
+    "<name>_up" when a button is released."""
     button = Signal(str)
 
     def __init__(self):
@@ -119,8 +120,10 @@ class Gamepad(QObject):
                     continue
                 for off in range(0, len(data) - EVENT.size + 1, EVENT.size):
                     _, _, typ, code, value = EVENT.unpack_from(data, off)
-                    if typ == EV_KEY and value == 1 and code in BUTTONS:
-                        self.button.emit(BUTTONS[code])
+                    if typ == EV_KEY and code in BUTTONS and value in (0, 1):
+                        # Presses as "a"; releases as "a_up" (the BIOS
+                        # confirmation is a 5-second hold).
+                        self.button.emit(BUTTONS[code] + ("" if value else "_up"))
                     elif typ == EV_ABS and code in (ABS_HAT0X, ABS_HAT0Y) and value:
                         self.button.emit({(ABS_HAT0X, -1): "left", (ABS_HAT0X, 1): "right",
                                           (ABS_HAT0Y, -1): "up", (ABS_HAT0Y, 1): "down"}[(code, value)])
@@ -221,16 +224,9 @@ class Backend(QObject):
             shutil.rmtree(self._secret_dir, ignore_errors=True)
             self._secret_dir = None
 
-    @Slot("QVariant", str, bool, str)
-    def apply(self, ids, boot, reapply, password):
+    def _start(self, args, password):
         if self._busy:
             return
-        args = [self._script, "--backend", "apply"]
-        if reapply:
-            args.append("--reapply")
-        if boot:
-            args += ["--boot", boot]
-        args += list(ids)
         env = QProcessEnvironment.systemEnvironment()
         if password:
             self._secret_dir, askpass, bindir = self._make_askpass(password)
@@ -240,7 +236,7 @@ class Backend(QObject):
         p.setProcessEnvironment(env)
         p.setProcessChannelMode(QProcess.MergedChannels)
         p.setProgram("bash")
-        p.setArguments(args)
+        p.setArguments([self._script, "--backend"] + args)
         self._buf = b""
         p.readyReadStandardOutput.connect(lambda: self._read(p))
         p.finished.connect(lambda *_: self._finished(p))
@@ -248,6 +244,25 @@ class Backend(QObject):
         self._busy = True
         self.busyChanged.emit()
         p.start()
+
+    @Slot("QVariant", str, bool, str)
+    def apply(self, ids, boot, reapply, password):
+        args = ["apply"]
+        if reapply:
+            args.append("--reapply")
+        if boot:
+            args += ["--boot", boot]
+        self._start(args + list(ids), password)
+
+    @Slot(str)
+    def biosPrepare(self, password):
+        """Download, checksum, fwupd check: ends with a bios-ready event."""
+        self._start(["bios-prepare"], password)
+
+    @Slot(str)
+    def biosFlash(self, password):
+        """Only after both warnings in the app."""
+        self._start(["bios-flash"], password)
 
     def _read(self, p):
         self._buf += bytes(p.readAllStandardOutput())

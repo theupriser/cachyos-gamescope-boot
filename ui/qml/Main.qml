@@ -71,9 +71,9 @@ ApplicationWindow {
         kpin: { label: "Pin the kernel", hint: "Fixes rebooting after shutdown",
                 body: "Newer CachyOS kernels make the Steam Machine reboot instead of shutting down. Untick once CachyOS fixes that.",
                 changes: ["linux-cachyos from Steamify's release (signature checked)", "Kept in /var/cache/steamify/kernel", "Added to IgnorePkg"] },
-        bios: { label: "Update BIOS", hint: "Runs in the terminal version (two warnings, typed confirmation)",
-                body: "Installs Valve's newest Steam Machine BIOS, at your own risk. The app leaves this to the terminal version, which asks twice and wants UPDATE typed.",
-                changes: ["Run steamify.sh in Konsole for this"] }
+        bios: { label: "Update BIOS", hint: "",
+                body: "Installs Valve's newest Steam Machine BIOS, at your own risk. It checks Valve's checksum and asks fwupd whether the file fits this machine, then warns you twice before anything is written.",
+                changes: ["Valve's fremont-hw-support package (checksum checked)", "fwupd writes the BIOS during the next restart", "Keep the power on until the machine has fully started again"] }
     })
 
     // --- State ---
@@ -91,6 +91,20 @@ ApplicationWindow {
     property string runError: ""
     property bool wrongPassword: false
     property int doneCount: 0
+    property string pending: "apply"         // what the password is for: apply | bios
+    property string sessionPassword: ""      // kept between the BIOS steps only
+    property var biosInfo: ({})
+    property bool biosRun: false
+    property int biosFocus: 0                // warning 1: 0 = Cancel, 1 = continue
+    property real holdProgress: 0            // warning 2: hold A/OK for 5 s
+    property bool holding: false
+    readonly property var bios: status.bios || null
+    function biosHint() {
+        if (!bios) return "";
+        if (!bios.newest) return "Now " + bios.current + ", newest unknown (offline?)";
+        if (bios.current === bios.newest) return bios.current + " is up to date";
+        return "Now " + bios.current + ", newest " + bios.newest + " · at your own risk";
+    }
     ListModel { id: logModel }
 
     readonly property var status: backend.status || ({})
@@ -151,15 +165,39 @@ ApplicationWindow {
         screen = "applying";
         backend.apply(wantedIds(), want.gaming ? boot : "", reapply, password || "");
     }
+    function askPassword(forWhat) {
+        pending = forWhat;
+        if (backend.needsPassword()) { wrongPassword = false; pw.text = ""; screen = "password"; pw.forceActiveFocus(); return true; }
+        return false;
+    }
     function onApplyPressed() {
         if (plan.length === 0) return;
-        if (backend.needsPassword()) { wrongPassword = false; pw.text = ""; screen = "password"; pw.forceActiveFocus(); }
-        else startApply("");
+        if (!askPassword("apply")) startApply("");
     }
     function submitPassword() {
         if (!backend.checkPassword(pw.text)) { wrongPassword = true; pw.selectAll(); return; }
         var p = pw.text; pw.text = "";
-        startApply(p);
+        if (pending === "bios") { sessionPassword = p; biosCheck(); }
+        else startApply(p);
+    }
+    // --- BIOS: check -> warning 1 -> warning 2 -> flash ---
+    function startBios() {
+        if (!bios || !bios.selectable) return;
+        biosInfo = {}; sessionPassword = "";
+        if (!askPassword("bios")) biosCheck();
+    }
+    function biosStep(action) {
+        steps = {}; failed = []; restartNeeded = false; runError = ""; doneCount = 0; logModel.clear();
+        plan = [{ id: "bios", action: action }];
+        var s = {}; s.bios = "wait"; steps = s;
+        biosRun = true; screen = "applying";
+    }
+    function biosCheck() { biosStep("check"); backend.biosPrepare(sessionPassword); }
+    function biosCancel() { sessionPassword = ""; holdProgress = 0; holding = false; biosRun = false; syncFromStatus(); screen = "menu"; }
+    function biosFlash() { holdProgress = 0; holding = false; biosStep("flash"); backend.biosFlash(sessionPassword); }
+    Timer {
+        interval: 50; repeat: true; running: screen === "bios2" && holding
+        onTriggered: { holdProgress = Math.min(1, holdProgress + 0.01); if (holdProgress >= 1) biosFlash(); }
     }
     Connections {
         target: backend
@@ -168,7 +206,9 @@ ApplicationWindow {
             if (ev.event === "start") { s[ev.id] = "run"; steps = s; }
             else if (ev.event === "done") { s[ev.id] = ev.ok ? "ok" : "fail"; steps = s; doneCount++; }
             else if (ev.event === "log") { logModel.append({ line: ev.line }); if (logModel.count > 400) logModel.remove(0); }
+            else if (ev.event === "bios-ready") { biosInfo = ev; biosFocus = 0; holdProgress = 0; screen = "bios1"; }
             else if (ev.event === "finished") {
+                if (!(biosRun && plan.length && plan[0].action === "check" && !ev.failed.length && !ev.error && !ev.nothing)) sessionPassword = "";
                 failed = ev.failed || []; restartNeeded = !!ev.restart;
                 runError = ev.error === "wrong-password" ? "The password didn't work." : (ev.error ? "sudo isn't available." : "");
                 screen = "done";
@@ -185,6 +225,7 @@ ApplicationWindow {
             else if (a === "accept") {
                 if (sel === rows.length) { goReview(false); return; }
                 var r = rows[sel];
+                if (r.kind === "action" && r.id === "bios") { startBios(); return; }
                 if (r.kind === "choice") boot = boot === "gamescope" ? "desktop" : "gamescope";
                 else if (r.kind === "toggle") toggle(r.id);
             }
@@ -199,21 +240,36 @@ ApplicationWindow {
         } else if (screen === "password") {
             if (a === "accept" || a === "apply") submitPassword();
             else if (a === "back") { pw.text = ""; screen = "review"; }
+        } else if (screen === "bios1") {
+            if (a === "left") biosFocus = 0;
+            else if (a === "right") biosFocus = 1;
+            else if (a === "accept") { if (biosFocus === 1) { holdProgress = 0; biosTyped.text = ""; screen = "bios2"; if (inputType === "keyboard") biosTyped.forceActiveFocus(); } else biosCancel(); }
+            else if (a === "back") biosCancel();
+        } else if (screen === "bios2") {
+            if (a === "back") biosCancel();
+            else if (a === "hold") holding = true;
+            else if (a === "release") { holding = false; if (holdProgress < 1) holdProgress = 0; }
         } else if (screen === "done") {
             if (a === "accept" && restartNeeded) backend.restart();
-            else if (a === "back" || a === "accept") { syncFromStatus(); screen = "menu"; }
+            else if (a === "back" || a === "accept") { biosRun = false; syncFromStatus(); screen = "menu"; }
         }
     }
     Connections {
         target: gamepad
         function onButton(b) {
+            if (b === "a_up") { if (screen === "bios2") act("release"); return; }
+            if (b.slice(-3) === "_up") return;
             inputType = "controller";
+            if (b === "a" && screen === "bios2") { act("hold"); return; }
             var map = { a: "accept", b: "back", x: "apply", y: "reapply", start: "apply", up: "up", down: "down", left: "left", right: "right" };
             if (map[b]) act(map[b]);
         }
     }
     function keyAct(e) {
         var fromRemote = Date.now() - remoteAt < 400;
+        if (screen === "bios2" && inputType !== "keyboard" && (e.key === Qt.Key_Return || e.key === Qt.Key_Enter)) {
+            if (!e.isAutoRepeat) act("hold"); e.accepted = true; return;
+        }
         if (!fromRemote) inputType = "keyboard";
         var k = e.key;
         if (k === Qt.Key_Up) act("up");
@@ -266,6 +322,18 @@ ApplicationWindow {
         Text { id: ct; anchors.centerIn: parent; text: parent.text.toUpperCase(); color: parent.fg; font.family: t.body; font.pixelSize: 12; font.weight: Font.DemiBold; font.letterSpacing: 0.6 }
     }
 
+    component RiskList: Column {
+        spacing: 8
+        Repeater {
+            model: ["A failed or interrupted BIOS update can leave the machine unable to start (bricked). Steamify, CachyOS and Valve take no responsibility for that.",
+                    "NEVER turn off the power, unplug the machine or press the power button while it updates, including the restart(s) afterwards.",
+                    "The screen can stay black for several minutes. Wait.",
+                    "Only on mains power, with all other programs closed."]
+            Row { required property string modelData; spacing: 10; width: parent.width
+                Rectangle { width: 6; height: 6; radius: 3; color: t.bad; y: 9 }
+                Text { text: parent.modelData; width: parent.width - 16; wrapMode: Text.WordWrap; color: t.soft; font.family: t.body; font.pixelSize: 15; lineHeight: 1.3 } }
+        }
+    }
     // --- The 1280x720 stage, scaled to the window ---
     Item {
         id: stage
@@ -274,6 +342,7 @@ ApplicationWindow {
         scale: Math.min(win.width / 1280, win.height / 720)
         focus: true
         Keys.onPressed: function (e) { if (!(screen === "password" && pw.activeFocus && e.key !== Qt.Key_Escape && e.key !== Qt.Key_Return && e.key !== Qt.Key_Enter)) keyAct(e); }
+        Keys.onReleased: function (e) { if (screen === "bios2" && !e.isAutoRepeat && (e.key === Qt.Key_Return || e.key === Qt.Key_Enter)) act("release"); }
 
         // Header
         Rectangle {
@@ -283,7 +352,7 @@ ApplicationWindow {
                 anchors.left: parent.left; anchors.leftMargin: 40; anchors.verticalCenter: parent.verticalCenter; spacing: 14
                 Image { source: iconUrl; width: 40; height: 40; sourceSize: Qt.size(80, 80); anchors.verticalCenter: parent.verticalCenter }
                 Text { text: "Steamify"; color: t.text; font.family: t.display; font.pixelSize: 28; font.weight: Font.Bold; anchors.verticalCenter: parent.verticalCenter }
-                Text { text: screen === "menu" ? "v" + (status.version || "") : "/ " + ({review: "Review", password: "Password", applying: "Applying", done: "Done"})[screen]
+                Text { text: screen === "menu" ? "v" + (status.version || "") : "/ " + ({review: "Review", password: "Password", applying: biosRun ? "BIOS update" : "Applying", done: "Done", bios1: "BIOS update", bios2: "BIOS update"})[screen]
                        color: t.faint; font.family: screen === "menu" ? t.mono : t.body; font.pixelSize: screen === "menu" ? 13 : 15; anchors.verticalCenter: parent.verticalCenter }
             }
             Rectangle {
@@ -356,9 +425,9 @@ ApplicationWindow {
                                     anchors.verticalCenter: parent.verticalCenter; spacing: 2
                                     x: row.modelData.parent ? 46 : 16
                                     width: controls.x - x - 16
-                                    opacity: row.modelData.kind === "action" ? 0.6 : 1
+                                    opacity: row.modelData.kind === "action" && !(bios && bios.selectable) ? 0.6 : 1
                                     Text { text: label(row.modelData); color: t.textHi; font.family: t.body; font.pixelSize: 17; font.weight: Font.DemiBold; elide: Text.ElideRight; width: parent.width }
-                                    Text { text: (texts[row.modelData.id] && texts[row.modelData.id].hint) || row.modelData.hint; color: t.mute; font.family: t.body; font.pixelSize: 13; elide: Text.ElideRight; width: parent.width }
+                                    Text { text: row.modelData.id === "bios" ? biosHint() : ((texts[row.modelData.id] && texts[row.modelData.id].hint) || row.modelData.hint); color: t.mute; font.family: t.body; font.pixelSize: 13; elide: Text.ElideRight; width: parent.width }
                                 }
                                 // Right: every control ends on the same edge
                                 Item {
@@ -384,7 +453,7 @@ ApplicationWindow {
                                     // action
                                     Rectangle { visible: row.modelData.kind === "action"; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                                         width: at.implicitWidth + 24; height: 30; radius: 8; color: t.warnBg
-                                        Text { id: at; anchors.centerIn: parent; text: "In the terminal"; color: t.warn; font.family: t.body; font.pixelSize: 13; font.weight: Font.DemiBold } }
+                                        Text { id: at; anchors.centerIn: parent; text: bios && bios.selectable ? "Update…" : (bios && bios.newest ? "Up to date" : "Unavailable"); color: t.warn; font.family: t.body; font.pixelSize: 13; font.weight: Font.DemiBold } }
                                 }
                             }
                         }
@@ -540,7 +609,7 @@ ApplicationWindow {
             anchors.top: header.bottom; anchors.bottom: parent.bottom; width: parent.width
             Column {
                 x: 40; y: 32; width: 560; spacing: 18
-                Text { text: "Applying your changes"; color: t.text; font.family: t.display; font.pixelSize: 34; font.weight: Font.DemiBold }
+                Text { text: biosRun ? (plan.length && plan[0].action === "check" ? "Checking the BIOS update" : "Installing the BIOS update") : "Applying your changes"; color: t.text; font.family: t.display; font.pixelSize: 34; font.weight: Font.DemiBold }
                 Rectangle { width: 560; height: 10; radius: 5; color: t.line
                     Rectangle { height: 10; radius: 5; color: t.accent; width: plan.length ? parent.width * Math.min(1, (doneCount + 0.3) / plan.length) : 0; Behavior on width { NumberAnimation { duration: 300 } } } }
                 Row { width: 560
@@ -556,7 +625,7 @@ ApplicationWindow {
                                 border.width: parent.parent.st === "wait" || parent.parent.st === "run" ? 2 : 0; border.color: parent.parent.st === "run" ? t.accent : "#343f50"
                                 Text { anchors.centerIn: parent; text: parent.parent.parent.st === "ok" ? "✓" : (parent.parent.parent.st === "fail" ? "!" : ""); color: parent.parent.parent.st === "ok" ? t.good : t.bad; font.pixelSize: 13; font.weight: Font.Bold }
                                 RotationAnimator on rotation { running: parent.parent.parent.st === "run"; from: 0; to: 360; duration: 1000; loops: Animation.Infinite } }
-                            Text { text: ({ on: "Turn on ", off: "Turn off ", again: "Re-apply ", desktop: "Boot into ", gaming: "Boot into " })[parent.parent.modelData.action] + ((texts[parent.parent.modelData.id] || {}).label || parent.parent.modelData.id)
+                            Text { text: ({ on: "Turn on ", off: "Turn off ", again: "Re-apply ", desktop: "Boot into ", gaming: "Boot into ", check: "Download and check the ", flash: "Hand to fwupd: the " })[parent.parent.modelData.action] + ((texts[parent.parent.modelData.id] || {}).label || parent.parent.modelData.id)
                                    color: parent.parent.st === "wait" ? t.faint : t.textHi; font.family: t.body; font.pixelSize: 16; font.weight: Font.DemiBold; anchors.verticalCenter: parent.verticalCenter; width: 380; elide: Text.ElideRight }
                             Text { text: ({ wait: "Waiting", run: "Working…", ok: "Done", fail: "Problem" })[parent.parent.st]; color: parent.parent.st === "ok" ? t.good : (parent.parent.st === "fail" ? t.bad : "#b8c3d1"); font.family: t.body; font.pixelSize: 13; anchors.verticalCenter: parent.verticalCenter }
                         }
@@ -573,6 +642,71 @@ ApplicationWindow {
             }
         }
 
+        // ================= BIOS: warning 1 =================
+        Item {
+            visible: screen === "bios1"
+            anchors.top: header.bottom; anchors.bottom: parent.bottom; width: parent.width
+            Rectangle {
+                x: 40; y: 28; width: 1200; height: parent.height - 28 - 64 - 24; radius: 16; color: "#1d1416"; border.width: 2; border.color: "#b33a3a"
+                Row { anchors.fill: parent; anchors.margins: 32; spacing: 40
+                    Column { width: 640; spacing: 16
+                        Row { spacing: 12
+                            Rectangle { width: 44; height: 44; radius: 12; color: "#3a1c1f"; Text { anchors.centerIn: parent; text: "!"; color: t.bad; font.pixelSize: 26; font.weight: Font.Bold } }
+                            Text { text: "BIOS update – entirely at your own risk"; color: "#ffd9d3"; font.family: t.display; font.pixelSize: 30; font.weight: Font.DemiBold; anchors.verticalCenter: parent.verticalCenter } }
+                        RiskList { width: 640 }
+                    }
+                    Rectangle { width: 440; height: 250; radius: 14; color: "#161d27"
+                        Column { anchors.fill: parent; anchors.margins: 22; spacing: 12
+                            Repeater { model: [["Current BIOS", biosInfo.current || ""], ["New BIOS", biosInfo.newest || ""], ["Checksum", "OK (Valve's package)"],
+                                               ["Compatible", biosInfo.compatible === "yes" ? "Yes (checked by fwupd)" : "Not checked (dry run)"]]
+                                Row { required property var modelData; width: 396
+                                    Text { text: parent.modelData[0]; color: t.faint; font.family: t.body; font.pixelSize: 15; width: 150 }
+                                    Text { text: parent.modelData[1]; color: parent.modelData[1].indexOf("Not") === 0 ? t.warn : t.text; font.family: t.mono; font.pixelSize: 15; width: 246; horizontalAlignment: Text.AlignRight; elide: Text.ElideLeft } } }
+                        } }
+                }
+            }
+            Rectangle {
+                anchors.bottom: parent.bottom; width: parent.width; height: 64; color: t.bar
+                Rectangle { width: parent.width; height: 1; color: t.line }
+                Text { anchors.left: parent.left; anchors.leftMargin: 40; anchors.verticalCenter: parent.verticalCenter; text: "Do you understand the risks and want to continue?"; color: t.soft; font.family: t.body; font.pixelSize: 15 }
+                Row { anchors.right: parent.right; anchors.rightMargin: 40; anchors.verticalCenter: parent.verticalCenter; spacing: 12
+                    Btn { k: biosFocus === 0 ? g.ok : "◀"; text: "Cancel"; focusRing: biosFocus === 0; onClicked: biosCancel() }
+                    Btn { k: biosFocus === 1 ? g.ok : "▶"; text: "I understand, continue"; focusRing: biosFocus === 1; color: "#8a2c2c"
+                          onClicked: { biosFocus = 1; act("accept"); } } }
+            }
+        }
+
+        // ================= BIOS: warning 2 (last chance) =================
+        Item {
+            visible: screen === "bios2"
+            anchors.top: header.bottom; anchors.bottom: parent.bottom; width: parent.width
+            Rectangle {
+                anchors.centerIn: parent; width: 760; height: b2.implicitHeight + 64; radius: 20; color: "#1d1416"; border.width: 2; border.color: "#b33a3a"
+                Column { id: b2; anchors.fill: parent; anchors.margins: 32; spacing: 18
+                    Text { text: "Last chance: this flashes BIOS " + (biosInfo.newest || ""); color: "#ffd9d3"; font.family: t.display; font.pixelSize: 32; font.weight: Font.DemiBold }
+                    Text { width: parent.width; wrapMode: Text.WordWrap; color: t.soft; font.family: t.body; font.pixelSize: 16; lineHeight: 1.3
+                           text: "After this, keep the power on until the machine has fully started again. Don't touch it, even if the screen is black." }
+                    // keyboard: type UPDATE
+                    Column { visible: inputType === "keyboard"; width: parent.width; spacing: 8
+                        Text { text: "Type UPDATE (in capitals) and press Enter to flash the BIOS:"; color: t.text; font.family: t.body; font.pixelSize: 15; font.weight: Font.DemiBold }
+                        TextField { id: biosTyped; width: 320; height: 50; color: t.textHi; font.family: t.mono; font.pixelSize: 20; leftPadding: 14
+                            placeholderText: "UPDATE"; placeholderTextColor: "#6b5a5a"
+                            background: Rectangle { radius: 10; color: t.bg; border.width: 2; border.color: biosTyped.text === "UPDATE" ? t.bad : "#5a3a3a" }
+                            Keys.onReturnPressed: if (text === "UPDATE") biosFlash()
+                            Keys.onEnterPressed: if (text === "UPDATE") biosFlash()
+                            Keys.onEscapePressed: biosCancel() } }
+                    // controller / remote: hold A or OK
+                    Column { visible: inputType !== "keyboard"; width: parent.width; spacing: 10
+                        Text { text: "Hold " + g.ok + " for 5 seconds to flash the BIOS. Let go to stop."; color: t.text; font.family: t.body; font.pixelSize: 15; font.weight: Font.DemiBold }
+                        Rectangle { width: parent.width; height: 14; radius: 7; color: "#3a2224"
+                            Rectangle { height: 14; radius: 7; color: t.bad; width: parent.width * holdProgress } } }
+                    Row { spacing: 12
+                        Btn { k: g.back; text: "Cancel"; onClicked: biosCancel() }
+                        Text { visible: bios && bios.dryRun; text: "Dry run: nothing will be flashed."; color: t.warn; font.family: t.body; font.pixelSize: 14; anchors.verticalCenter: parent.verticalCenter } }
+                }
+            }
+        }
+
         // ================= DONE =================
         Item {
             visible: screen === "done"
@@ -584,7 +718,7 @@ ApplicationWindow {
                     Text { anchors.centerIn: parent; text: failed.length || runError ? "!" : "✓"; color: failed.length || runError ? t.warn : t.good; font.pixelSize: 36; font.weight: Font.Bold } }
                 Text { text: runError ? "Nothing changed" : (failed.length ? "Done, with a problem" : "All done"); color: t.text; font.family: t.display; font.pixelSize: 40; font.weight: Font.DemiBold; anchors.horizontalCenter: parent.horizontalCenter }
                 Text { width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; color: t.soft; font.family: t.body; font.pixelSize: 17
-                       text: runError ? runError : (plan.length + (plan.length === 1 ? " change" : " changes") + " applied." + (restartNeeded ? " Some take effect after a restart." : "")) }
+                       text: runError ? runError : (biosRun ? (failed.length ? "The BIOS was not changed." : (bios && bios.dryRun ? "Dry run: nothing was flashed. " : "BIOS " + (biosInfo.newest || "") + " is staged and is written during the restart. ") + (failed.length ? "" : "Keep the power on and don't touch the machine until it has fully started again, even if the screen stays black.")) : (plan.length + (plan.length === 1 ? " change" : " changes") + " applied." + (restartNeeded ? " Some take effect after a restart." : ""))) }
                 Rectangle { visible: failed.length > 0; anchors.horizontalCenter: parent.horizontalCenter; width: ft.implicitWidth + 32; height: 44; radius: 12; color: t.warnBg
                     Text { id: ft; anchors.centerIn: parent; color: "#f2c27a"; font.family: t.body; font.pixelSize: 14
                            text: "Had a problem: " + failed.map(function (id) { return (texts[id] || {}).label || id; }).join(", ") + ". See the details." } }
