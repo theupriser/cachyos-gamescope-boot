@@ -251,6 +251,13 @@ install_valve_led_driver() {
     # Load now, and on every boot.
     echo leds-valve | sudo tee /etc/modules-load.d/leds-valve.conf >/dev/null
 
+    # The running kernel was just replaced (the kernel pin): its modules are
+    # gone, so the driver can only load after the restart.
+    if [[ ! -d "/usr/lib/modules/$(uname -r)/kernel" ]]; then
+        ok "The LED driver loads after the restart (into the new kernel)."
+        return 0
+    fi
+
     info "Loading the leds-valve kernel module..."
     if sudo modprobe leds-valve; then
         ok "Module loaded."
@@ -361,6 +368,11 @@ machine_status() {
 }
 
 machine_enable() {
+    # The pinned kernel first when it's wanted too, so DKMS builds the LED
+    # driver for it once, instead of for the current kernel and then again.
+    if [[ "${WANTED[kpin]:-0}" == 1 ]]; then
+        install_pinned_kernel || { err "Couldn't set up kernel $PINNED_KERNEL_VER."; return 1; }
+    fi
     ensure_aur_helper || { warn "Couldn't set up an AUR helper automatically. Install yay or paru, then run the wizard again."; return 1; }
     install_valve_led_driver || { warn "LED driver setup ran into a problem - see errors above."; return 1; }
     install_headers_boot_check

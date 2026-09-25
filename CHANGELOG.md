@@ -5,6 +5,18 @@ All notable changes, per version and per commit. Versions follow
 `steamify.sh`. Versions before 0.7.0 were numbered afterwards,
 one per merged pull request.
 
+## 1.1.1 - 2026-09-25
+
+- **perf: Pinned kernel before the LED driver**
+  - With the kernel pin ticked, Steam Machine support installs kernel
+    7.1.6-1 first, so DKMS builds the LED driver once, for that kernel,
+    instead of for the current kernel first and then again. The LED driver
+    then loads after the restart, which it now says instead of warning.
+- **fix: steamos-manager starts after cecd**
+  - It checks only at its start whether cecd runs; if it was first, Steam's
+    HDMI-CEC settings were missing until it restarted. A drop-in
+    (`/etc/systemd/user/steamos-manager.service.d/`) orders it after cecd.
+
 ## 1.1.0 - 2026-09-25
 
 - **feat: HDMI-CEC** (experimental, on every PC; ticked by default only on a
