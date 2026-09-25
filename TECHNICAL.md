@@ -188,7 +188,8 @@ Steam Machine; the CachyOS kernel has DisplayPort CEC built in) or a USB
 adapter. The menu lists the CEC devices found. Also turn on CEC on the TV
 (Sony: BRAVIA Sync, Samsung: Anynet+, LG: SimpLink). On a Steam Machine
 `steamos-manager` writes cecd's settings from Steam's (wake the TV, put it to
-sleep), in `~/.config/cecd/config.d/`.
+sleep), in `~/.config/cecd/config.d/`, and Steam shows its HDMI-CEC
+settings; the wizard restarts steamos-manager so that happens right away.
 
 It's experimental: on SteamOS itself CEC can wake the Steam Machine right
 after it goes to sleep (Samsung TVs,

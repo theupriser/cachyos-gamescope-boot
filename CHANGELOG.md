@@ -13,6 +13,8 @@ one per merged pull request.
     the TV turns on and off with the PC. On a Steam Machine, steamos-manager
     configures it from Steam's settings.
   - Works with any `/dev/cec*` (GPU or USB adapter); the menu lists them.
+  - Restarts steamos-manager, which only offers Steam its HDMI-CEC settings
+    when cecd was there at its start.
   - The README no longer says Steam Machine support alone gives HDMI-CEC:
     `cecd` wasn't installed, so it didn't.
 

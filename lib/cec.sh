@@ -9,6 +9,14 @@
 
 CEC_PKGS=(cecd cec-audio-control inputattach-cec-units)
 
+restart_steamos_manager() {
+    # steamos-manager only offers its HDMI-CEC interface (Steam's CEC
+    # settings) when cecd was there at its start.
+    systemctl --user is-active -q steamos-manager.service 2>/dev/null &&
+        systemctl --user restart steamos-manager.service
+    return 0
+}
+
 cec_status() { pacman -Q "${CEC_PKGS[@]}" >/dev/null 2>&1; }
 
 fetch_holo_pkg() {
@@ -60,6 +68,7 @@ cec_enable() {
     systemctl --user enable steamos-manager-configure-cecd.service 2>/dev/null
     if compgen -G "/dev/cec*" >/dev/null; then
         systemctl --user restart cecd.service 2>/dev/null
+        restart_steamos_manager
         ok "HDMI-CEC on ($(cd /dev && echo cec*)). Turn on CEC on your TV too (e.g. Sony: BRAVIA Sync, Samsung: Anynet+, LG: SimpLink)."
     else
         warn "No CEC device (/dev/cec*) found: your GPU may not support CEC. A USB CEC adapter"
@@ -77,6 +86,7 @@ cec_disable() {
         state_clear cec
     fi
     sudo udevadm control --reload
+    restart_steamos_manager
     ok "HDMI-CEC removed."
 }
 
