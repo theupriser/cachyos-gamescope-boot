@@ -50,6 +50,12 @@ What Steamify can do on a Valve Steam Machine:
     [release](https://github.com/theupriser/steamify-cachyos/releases/tag/kernel-7.1.6-1),
     checked against CachyOS's signature
     ([details](TECHNICAL.md#kernel-pin-steam-machine)).
+- **HDMI refresh boost** - only with the pinned kernel, never ticked by
+  default: gets the highest refresh rate your HDMI display runs at the
+  desktop resolution (e.g. 110 Hz instead of 60 on a 3440x1440 monitor).
+  Each step is shown and you confirm it; no answer within 15 s switches
+  back. For more (e.g. 175 Hz), use DisplayPort
+  ([details](TECHNICAL.md#hdmi-refresh-boost-steam-machine)).
 - **Update BIOS** - installs Valve's newest Steam Machine BIOS. Never ticked
   by default, at your own risk, and only after two warnings
   ([details](TECHNICAL.md#bios-updates-steam-machine)).

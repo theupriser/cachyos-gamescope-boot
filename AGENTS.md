@@ -171,6 +171,14 @@ gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
   The start script closes its window after a 10-second countdown on success
   and waits for Enter after an error; it uses `pipefail`, or a failed
   download would run an empty script and count as success.
+- HDMI refresh boost (`hdmi`, `lib/hdmi-refresh.sh`): only on Fremont with
+  the pinned kernel (stays visible while on). It needs someone at the
+  screen: the graphical app's backend (`BACKEND=true`) must refuse it, and every step needs a "y" within 15 s
+  (`WIZARD_HDMI_CONFIRM_SECONDS` for scripted tests). debugfs is root-only
+  (glob it under sudo), and `edid_override` takes exactly `reset` with no
+  newline. Build the EDID from the DDC read, not from sysfs: a live override
+  replaces the kernel's copy. The kernel command-line value holds a path, so
+  `sed` uses `|` as its delimiter.
 - `Relogin=true` means a gamescope that fails to start is relaunched in a
   tight loop; keep that in mind when changing session handling.
 
