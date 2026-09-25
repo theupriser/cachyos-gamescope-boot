@@ -15,7 +15,7 @@
 set -uo pipefail
 
 # Release version, see CHANGELOG.md.
-VERSION=1.1.0
+VERSION=1.1.1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 

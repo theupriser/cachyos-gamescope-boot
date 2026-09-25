@@ -361,6 +361,11 @@ machine_status() {
 }
 
 machine_enable() {
+    # The pinned kernel first when it's wanted too, so DKMS builds the LED
+    # driver for it once, instead of for the current kernel and then again.
+    if [[ "${WANTED[kpin]:-0}" == 1 ]]; then
+        install_pinned_kernel || { err "Couldn't set up kernel $PINNED_KERNEL_VER."; return 1; }
+    fi
     ensure_aur_helper || { warn "Couldn't set up an AUR helper automatically. Install yay or paru, then run the wizard again."; return 1; }
     install_valve_led_driver || { warn "LED driver setup ran into a problem - see errors above."; return 1; }
     install_headers_boot_check

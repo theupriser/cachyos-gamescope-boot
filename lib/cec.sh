@@ -8,6 +8,9 @@
 # Sourced by steamify.sh; not meant to be run on its own.
 
 CEC_PKGS=(cecd cec-audio-control inputattach-cec-units)
+# steamos-manager checks once, at its start, whether cecd runs; order it
+# after cecd so it never misses it at login.
+CEC_ORDER_DROPIN=/etc/systemd/user/steamos-manager.service.d/10-steamify-after-cecd.conf
 
 restart_steamos_manager() {
     # steamos-manager only offers its HDMI-CEC interface (Steam's CEC
@@ -64,6 +67,9 @@ cec_enable() {
     # session, after steamos-manager wrote its config from Steam's settings.
     sudo udevadm control --reload
     sudo udevadm trigger --subsystem-match=cec --action=add
+    sudo mkdir -p "$(dirname "$CEC_ORDER_DROPIN")"
+    printf '%s\n' "# Written by Steamify: steamos-manager only sees cecd if it runs at its start." \
+        '[Unit]' 'After=cecd.service' | sudo tee "$CEC_ORDER_DROPIN" >/dev/null
     systemctl --user daemon-reload
     systemctl --user enable steamos-manager-configure-cecd.service 2>/dev/null
     if compgen -G "/dev/cec*" >/dev/null; then
@@ -81,6 +87,9 @@ cec_disable() {
     systemctl --user disable --now cecd.service cec-audio-control.socket cec-audio-control.service 2>/dev/null
     systemctl --user disable steamos-manager-configure-cecd.service 2>/dev/null
     sudo pacman -Rns --noconfirm "${CEC_PKGS[@]}" 2>/dev/null
+    sudo rm -f "$CEC_ORDER_DROPIN"
+    sudo rmdir "$(dirname "$CEC_ORDER_DROPIN")" 2>/dev/null
+    systemctl --user daemon-reload
     if [[ -n "$(state_get cec installed_linuxconsole)" ]]; then
         sudo pacman -Rns --noconfirm linuxconsole 2>/dev/null
         state_clear cec
