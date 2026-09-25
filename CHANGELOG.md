@@ -15,6 +15,10 @@ one per merged pull request.
     (rounded down to ten, plus the hundred below as a safe option), tests
     each step live with a confirmation, and makes the confirmed ones
     permanent through `drm.edid_firmware` (Limine, sdboot-manage or GRUB).
+- **feat: HDMI refresh boost and Update BIOS under Steam Machine support**
+  - Both are sub-options now, shown only while Steam Machine support is
+    ticked. Unticking it unticks them; unticking the kernel pin unticks the
+    HDMI refresh boost.
 
 ## 1.1.4 - 2026-09-25
 
