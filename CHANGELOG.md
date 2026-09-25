@@ -17,6 +17,8 @@ one per merged pull request.
     Steam's HDMI-CEC settings (and its CEC volume buttons). HDMI-CEC now adds
     a drop-in for `steam-launcher.service` that overrides it with
     `STEAM_ENABLE_CEC=1` (`/etc/steamify/steam-cec.env`).
+  - HDMI-CEC set up by 1.1.0/1.1.1 shows as off and ticked, so a normal run
+    (Enter) adds this.
 
 ## 1.1.1 - 2026-09-25
 

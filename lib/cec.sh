@@ -32,7 +32,11 @@ cec_link_steamos_manager() {
     return 0
 }
 
-cec_status() { pacman -Q "${CEC_PKGS[@]}" >/dev/null 2>&1; }
+cec_installed() { pacman -Q "${CEC_PKGS[@]}" >/dev/null 2>&1; }
+# On = installed and Steam told to show its CEC settings. An install from
+# before 1.1.2 lacks the latter; the menu then ticks it (see cec_repair).
+cec_status() { cec_installed && [[ -f "$CEC_STEAM_DROPIN" ]]; }
+cec_repair() { cec_installed && ! cec_status; }
 
 fetch_holo_pkg() {
     # fetch_holo_pkg <dir> <package>: download the newest <package> from
