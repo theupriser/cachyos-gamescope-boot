@@ -41,8 +41,13 @@ bootstrap_yay() {
         return 1
     fi
 
+    # Build only, then install it ourselves: makepkg -i runs `sudo -k pacman`,
+    # which forgets the cached sudo password and asks for it again.
     info "Building and installing yay (this runs makepkg as your user, not root)..."
-    if (cd "$tmp_dir/yay-bin" && makepkg -si --noconfirm); then
+    local -a pkgs
+    if (cd "$tmp_dir/yay-bin" && makepkg --noconfirm) &&
+        mapfile -t pkgs < <(cd "$tmp_dir/yay-bin" && makepkg --packagelist | grep -v -- '-debug-') &&
+        sudo pacman -U --noconfirm "${pkgs[@]}"; then
         ok "yay installed."
         rm -rf "$tmp_dir"
         return 0

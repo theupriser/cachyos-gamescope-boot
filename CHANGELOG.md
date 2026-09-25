@@ -32,6 +32,9 @@ one per merged pull request.
     unchanged, when single user mode is off; the single user wallet is kept
     and reused next time.
   - Moved from the SteamOS theme, where it only helped without any wallet.
+- **fix: No second sudo password prompt while installing yay**
+  - `makepkg -si` installs with `sudo -k`, which forgets the cached password;
+    yay is now built with makepkg and installed with `sudo pacman -U`.
 - **docs: LICENSE.md** with the MIT license the README already named.
 - **chore: No more `setup-gamescope-boot.sh` release asset**
   - Only `steamify.sh` is published; the old name from before 0.9.0 is gone.
