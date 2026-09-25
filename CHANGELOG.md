@@ -5,6 +5,17 @@ All notable changes, per version and per commit. Versions follow
 `steamify.sh`. Versions before 0.7.0 were numbered afterwards,
 one per merged pull request.
 
+## 2.0.0 - 2026-09-25
+
+- **feat: Steamify app (v2 UI)**
+  - A graphical app for controller, keyboard and TV remote, driving the same
+    components through `steamify.sh --backend`; the BIOS update with both
+    warnings; built by GitHub and run with curl.
+- **feat(ui): HDMI refresh boost in the app, off only**
+  - Each step needs someone at the keyboard, so it's turned on from the
+    menu in Konsole; the app can only turn it off. Unticking Steam Machine
+    support or the kernel pin unticks it, as in the menu.
+
 ## 1.2.0 - 2026-09-25
 
 - **feat: HDMI refresh boost (Steam Machine, pinned kernel)**
@@ -19,8 +30,6 @@ one per merged pull request.
   - Both are sub-options now, shown only while Steam Machine support is
     ticked. Unticking it unticks them; unticking the kernel pin unticks the
     HDMI refresh boost.
-  - In the app, HDMI refresh boost can only be turned off: each step needs
-    someone at the keyboard, so it's turned on from the menu in Konsole.
 
 ## 1.1.4 - 2026-09-25
 
