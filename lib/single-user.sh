@@ -81,6 +81,13 @@ single_wallet_disable() {
     ok "Your own wallet is back (the empty one is kept as kdewallet.kwl$WALLET_OURS)."
 }
 
+reload_screen_locker() {
+    # The screen locker only reads kscreenlockerrc when the session starts:
+    # without this it keeps locking after idling until the next login.
+    qdbus6 org.freedesktop.ScreenSaver /ScreenSaver org.kde.screensaver.configure >/dev/null 2>&1 ||
+        busctl --user call org.freedesktop.ScreenSaver /ScreenSaver org.kde.screensaver configure >/dev/null 2>&1 || true
+}
+
 single_launcher() {
     # Launcher: only Sleep / Restart / Shut Down, no Session dropdown (where
     # Log Out lives). Restricting action/logout instead would also hide
@@ -114,6 +121,7 @@ single_enable() {
     single_launcher
 
     restart_plasmashell_if_stopped
+    reload_screen_locker
     single_wallet_enable
     ok "Single user: no lock screen, user switching or log out."
 }
@@ -143,6 +151,7 @@ single_disable() {
         done
     fi
     restart_plasmashell_if_stopped
+    reload_screen_locker
     single_wallet_disable
     ok "KDE's normal lock screen and user switching are back."
 }
