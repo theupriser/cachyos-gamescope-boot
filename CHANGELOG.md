@@ -25,6 +25,7 @@ one per merged pull request.
 - **docs: Shorter README, with a Steam Machine section**
   - How it works moved to `TECHNICAL.md`, problems to `TROUBLESHOOTING.md`;
     the README links to them and to the files it mentions.
+- **docs: LICENSE.md** with the MIT license the README already named.
 - **chore: No more `setup-gamescope-boot.sh` release asset**
   - Only `steamify.sh` is published; the old name from before 0.9.0 is gone.
 

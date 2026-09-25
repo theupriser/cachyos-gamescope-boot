@@ -113,4 +113,4 @@ Contributing (or an AI agent)? Read [AGENTS.md](AGENTS.md).
 
 ## License
 
-MIT - do whatever you want with it.
+MIT - do whatever you want with it. See [LICENSE.md](LICENSE.md).
