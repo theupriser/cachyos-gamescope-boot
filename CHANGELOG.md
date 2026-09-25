@@ -12,6 +12,11 @@ one per merged pull request.
     steamos-manager; so steamos-manager's `configure-cecd` unit couldn't be
     enabled and cecd ran without Steam's settings. Steam Machine support now
     links them once steamos-manager is there.
+- **fix: HDMI-CEC settings shown in Steam**
+  - CachyOS's gaming mode script sets `STEAM_ENABLE_CEC=0`, which hides
+    Steam's HDMI-CEC settings (and its CEC volume buttons). HDMI-CEC now adds
+    a drop-in for `steam-launcher.service` that overrides it with
+    `STEAM_ENABLE_CEC=1` (`/etc/steamify/steam-cec.env`).
 
 ## 1.1.1 - 2026-09-25
 
