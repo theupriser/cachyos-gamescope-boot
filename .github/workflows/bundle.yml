@@ -5,8 +5,6 @@
 # release are moved to it, so both of these always get the newest version:
 #   curl -fsSL https://github.com/theupriser/steamify-cachyos/releases/latest/download/steamify.sh | bash
 #   curl -fsSL https://github.com/theupriser/steamify-cachyos/releases/download/latest/steamify.sh | bash
-# The bundle is also published as setup-gamescope-boot.sh, its name before
-# 0.9.0, so older install commands keep working.
 # Pull requests only build and check it, and warn when VERSION is already released.
 name: Single-file build
 
@@ -30,8 +28,6 @@ jobs:
       - name: Build
         run: |
           .github/tools/bundle.sh dist/steamify.sh
-          # Old name (before 0.9.0), for older install commands and links.
-          cp dist/steamify.sh dist/setup-gamescope-boot.sh
 
       - name: Check
         run: |
@@ -77,7 +73,7 @@ jobs:
 
           ## Changes in v$VERSION
           $changes"
-          gh release create "v$VERSION" dist/steamify.sh dist/setup-gamescope-boot.sh assets/steam-gaming-settings.svg \
+          gh release create "v$VERSION" dist/steamify.sh assets/steam-gaming-settings.svg \
               --target "$GITHUB_SHA" --title "Steamify CachyOS v$VERSION" --notes "$notes" --latest
 
           # "latest" follows the newest version tag, for the older install URL
@@ -90,4 +86,4 @@ jobs:
           else
             gh release create latest --title "Steamify CachyOS - latest (v$VERSION)" --notes "$latest_notes" --latest=false
           fi
-          gh release upload latest dist/steamify.sh dist/setup-gamescope-boot.sh assets/steam-gaming-settings.svg --clobber
+          gh release upload latest dist/steamify.sh assets/steam-gaming-settings.svg --clobber

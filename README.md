@@ -18,10 +18,12 @@ Steam Machine.
    - **Boot into: gamescope / desktop** - where the PC starts. Gaming mode is
      the default.
 2. **SteamOS theme** - the Vapor look of SteamOS for the desktop, with
-   **Add to Steam** in right-click menus.
+   **Add to Steam** in right-click menus
+   ([details](TECHNICAL.md#steamos-desktop-look)).
 3. **Steam Deck/Machine icons** - Steam Deck button icons in gaming mode.
 4. **Single user mode** - like SteamOS: never a login or lock screen. Typing a
-   password with a controller is no fun.
+   password with a controller is no fun
+   ([details](TECHNICAL.md#single-user-mode-sddm-no-locking)).
 5. **Steamify shortcut** - an icon on the desktop and in the launcher that
    opens the newest Steamify, so you don't need the install command again.
 
@@ -34,9 +36,13 @@ On a Valve Steam Machine the menu has two more items:
   button puts it to sleep like a console.
   - **Pin the kernel to 7.1.6-1** - on by default: with newer CachyOS kernels
     the Steam Machine reboots instead of shutting down. Untick it once CachyOS
-    fixes that.
+    fixes that. The kernel comes from its own
+    [release](https://github.com/theupriser/steamify-cachyos/releases/tag/kernel-7.1.6-1),
+    checked against CachyOS's signature
+    ([details](TECHNICAL.md#kernel-pin-steam-machine)).
 - **Update BIOS** - installs Valve's newest Steam Machine BIOS. Never ticked
-  by default, at your own risk, and only after two warnings.
+  by default, at your own risk, and only after two warnings
+  ([details](TECHNICAL.md#bios-updates-steam-machine)).
 
 ## Requirements
 
@@ -52,7 +58,8 @@ curl -fsSL https://github.com/theupriser/steamify-cachyos/releases/latest/downlo
 ```
 
 Prefer to look at the script first? Clone the repository and run
-`./steamify.sh` (keep the whole folder: it needs `lib/`).
+[`./steamify.sh`](steamify.sh) (keep the whole folder: it needs
+[`lib/`](lib/)).
 
 You'll see a checklist:
 
@@ -102,6 +109,7 @@ sudo /usr/lib/steamos/steam-set-session plasma.desktop && sudo systemctl restart
 
 More in [TROUBLESHOOTING.md](TROUBLESHOOTING.md). How it all works:
 [TECHNICAL.md](TECHNICAL.md). Changes per version: [CHANGELOG.md](CHANGELOG.md).
+Contributing (or an AI agent)? Read [AGENTS.md](AGENTS.md).
 
 ## License
 

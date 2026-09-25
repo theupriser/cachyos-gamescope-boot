@@ -23,7 +23,10 @@ one per merged pull request.
     pinned kernel keeps matching headers.
   - The BIOS item moves down one (9 on a Steam Machine).
 - **docs: Shorter README, with a Steam Machine section**
-  - How it works moved to `TECHNICAL.md`, problems to `TROUBLESHOOTING.md`.
+  - How it works moved to `TECHNICAL.md`, problems to `TROUBLESHOOTING.md`;
+    the README links to them and to the files it mentions.
+- **chore: No more `setup-gamescope-boot.sh` release asset**
+  - Only `steamify.sh` is published; the old name from before 0.9.0 is gone.
 
 ## 0.10.0 - 2026-09-24
 
