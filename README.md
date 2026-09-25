@@ -305,9 +305,11 @@ them. DKMS builds the LED driver for it; restart to boot it.
 
 The packages (and their signatures, which pacman checks) are kept in
 `/var/cache/steamify/kernel`, so re-applying needs no download. Missing
-files are taken from pacman's cache, else downloaded from
-`archive.cachyos.org`, then `mirror.cachyos.org` (which only has the current
-kernel). Set `PINNED_KERNEL_URL` to a directory URL with the files to try
+files are taken from pacman's cache, else downloaded from this repo's
+`kernel-7.1.6-1` release, then `archive.cachyos.org`, then
+`mirror.cachyos.org` (which only has the current kernel). Every file must
+match the SHA-256 in the script and have a valid CachyOS signature; a bad
+one is deleted, so the next run downloads it again. Set `PINNED_KERNEL_URL` to a directory URL with the files to try
 another source first, or drop them into the kernel directory yourself.
 
 Unticking it removes the pin and runs `sudo pacman -Syu`, which brings the

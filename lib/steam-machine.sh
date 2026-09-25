@@ -22,11 +22,19 @@ PINNED_KERNEL_VER="7.1.6-1"
 PINNED_KERNEL_KVER="7.1.6-1-cachyos"
 PINNED_KERNEL_PKGS=(linux-cachyos linux-cachyos-headers)
 PINNED_KERNEL_DIR="${PINNED_KERNEL_DIR:-/var/cache/steamify/kernel}"
-# Tried in order, after the kernel dir and pacman's cache. The archive keeps
-# every release; the mirror only the current one. PINNED_KERNEL_URL puts
-# another source (a directory holding the files) in front.
+# SHA-256 of each package, so a file from any source is the one reviewed
+# here; its CachyOS signature is checked as well.
+declare -A PINNED_KERNEL_SHA256=(
+    [linux-cachyos]=417fcd07102192b86e78e92ed7171d5a49378e9f57faea3fa2c7c541e9f68d08
+    [linux-cachyos-headers]=d069866a11d9092746e1d5133cefd8924f027da2c9bf5af38d30b3aed6ded9bf
+)
+# Tried in order, after the kernel dir and pacman's cache. Our own release
+# always has these files; the archive keeps every release; the mirror only
+# the current one. PINNED_KERNEL_URL puts another source (a directory
+# holding the files) in front.
 PINNED_KERNEL_SOURCES=(
     ${PINNED_KERNEL_URL:+"$PINNED_KERNEL_URL"}
+    "https://github.com/theupriser/steamify-cachyos/releases/download/kernel-$PINNED_KERNEL_VER"
     "https://archive.cachyos.org/archive/cachyos"
     "https://mirror.cachyos.org/repo/x86_64/cachyos"
 )
@@ -56,6 +64,22 @@ fetch_pinned_kernel_file() {
     done
     sudo rm -f "$dest.part"
     return 1
+}
+
+verify_pinned_kernel_pkg() {
+    # $1 = package name, $2 = file. Both checks must pass: the SHA-256 from
+    # this script, and the CachyOS signature (pacman on its own installs a
+    # local file without a .sig: LocalFileSigLevel = Optional).
+    local sum
+    sum="$(sha256sum "$2" | cut -d' ' -f1)"
+    if [[ "$sum" != "${PINNED_KERNEL_SHA256[$1]}" ]]; then
+        err "$(basename "$2") doesn't match its expected checksum."
+        return 1
+    fi
+    if ! sudo pacman-key --verify "$2.sig" "$2" >/dev/null 2>&1; then
+        err "$(basename "$2") doesn't have a valid CachyOS signature."
+        return 1
+    fi
 }
 
 pin_kernel_in_pacman_conf() {
@@ -94,13 +118,19 @@ install_pinned_kernel() {
         f="$p-$PINNED_KERNEL_VER-x86_64.pkg.tar.zst"
         fetch_pinned_kernel_file "$f" && fetch_pinned_kernel_file "$f.sig" ||
             { err "Couldn't download $f from any source."; return 1; }
+        if ! verify_pinned_kernel_pkg "$p" "$PINNED_KERNEL_DIR/$f"; then
+            # Removed, so the next run fetches it again.
+            sudo rm -f "$PINNED_KERNEL_DIR/$f" "$PINNED_KERNEL_DIR/$f.sig"
+            err "Removed it; run the wizard again to download it once more."
+            return 1
+        fi
         files+=("$PINNED_KERNEL_DIR/$f")
     done
 
     # pacman checks each package against the .sig next to it.
     info "Installing kernel $PINNED_KERNEL_VER..."
     if ! sudo pacman -U --noconfirm "${files[@]}"; then
-        err "Installing kernel $PINNED_KERNEL_VER failed. If a file is damaged, delete it from $PINNED_KERNEL_DIR and try again."
+        err "Installing kernel $PINNED_KERNEL_VER failed."
         return 1
     fi
     [[ "$(uname -r)" != "$PINNED_KERNEL_KVER" ]] && RESTART_FOR_LOGIN=true

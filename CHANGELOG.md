@@ -15,6 +15,10 @@ one per merged pull request.
   - The packages are kept in `/var/cache/steamify/kernel` and reinstalled
     from there without downloading; else from pacman's cache, the CachyOS
     archive, the CachyOS mirror, or `PINNED_KERNEL_URL`.
+  - First download source: the `kernel-7.1.6-1` release of this repo, a
+    one-off release that always has these files.
+  - Every file is checked against its SHA-256 (in the script) and its
+    CachyOS signature before it's installed; a bad file is deleted.
   - Installed kernel headers are no longer updated by the wizard, so the
     pinned kernel keeps matching headers.
   - The BIOS item moves down one (9 on a Steam Machine).
