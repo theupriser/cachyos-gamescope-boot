@@ -24,7 +24,7 @@ declare -A LABEL=(
     [theme]="Install SteamOS theme: Vapor look (cachyos-vapor)"
     [glyphs]="Install Steam Deck/Machine icons: Deck button icons in gaming mode"
     [single]="Single user mode: no password, lock screen or log out (SDDM)"
-    [launcher]="Steamify shortcut: desktop icon to run this again"
+    [launcher]="Steamify shortcut: the app on the desktop, Steamify Terminal in the launcher"
     [cec]="HDMI-CEC: use Steam with the TV remote, TV on/off with the PC (experimental)"
     [machine]="Steam Machine support: LED bar driver, hardware settings in Steam"
     [kpin]="Pin the kernel to $PINNED_KERNEL_VER (fixes rebooting after shutdown)"
@@ -72,6 +72,9 @@ detect_components() {
     done
     # HDMI-CEC set up by an older version: tick it, so a normal run fixes it.
     component_available cec && cec_repair && WANTED[cec]=1
+    # The terminal-only Steamify shortcut from before 2.0.1: tick it, so a
+    # normal run replaces it with the app.
+    launcher_repair && WANTED[launcher]=1
     # Shows the current and newest BIOS version.
     bios_available && { bios_lookup_newest; LABEL[bios]="$(bios_label)"; }
     # First run: preselect the full SteamOS experience (never an action).

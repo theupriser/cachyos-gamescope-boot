@@ -5,6 +5,16 @@ All notable changes, per version and per commit. Versions follow
 `steamify.sh`. Versions before 0.7.0 were numbered afterwards,
 one per merged pull request.
 
+## 2.0.1 - 2026-09-25
+
+- **feat: The Steamify shortcut opens the app**
+  - "Steamify CachyOS" on the desktop and in the launcher starts the newest
+    app (in Konsole the first time, if PySide6 still has to be installed).
+    The terminal menu is "Steamify Terminal" in the launcher. A shortcut from
+    before 2.0.1 is ticked in the menu, so a normal run replaces it.
+  - steamify-app.sh leaves the shortcut's launcher entry alone (it has the
+    same id, `steamify-ui.desktop`, and always starts the newest release).
+
 ## 2.0.0 - 2026-09-25
 
 - **feat: Steamify app (v2 UI)**

@@ -53,8 +53,11 @@ if ! python3 -c 'import PySide6.QtQml' 2>/dev/null; then
     sudo pacman -S --needed --noconfirm pyside6 </dev/tty || die "Installing pyside6 failed."
 fi
 
-# Launcher entry (its id also names the app to the desktop portal).
+# Launcher entry (its id also names the app to the desktop portal). The
+# Steamify shortcut's entry has the same id and always starts the newest
+# release: left alone.
 mkdir -p "$APPS"
+grep -q '^X-Steamify-Shortcut=true' "$APPS/steamify-ui.desktop" 2>/dev/null ||
 cat > "$APPS/steamify-ui.desktop" << EOF
 [Desktop Entry]
 Type=Application
