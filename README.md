@@ -30,6 +30,10 @@ Everything you turn off is put back the way it was.
 7. **Steam Machine support** - only shown on a Valve Steam Machine: the
    driver for the front LED bar, and the hardware settings in Steam (fan,
    TV control over HDMI-CEC).
+   - **Pin the kernel to 7.1.6-1** - on by default with Steam Machine
+     support (untick to opt out): newer CachyOS kernels make the Steam
+     Machine reboot instead of shutting down (see
+     [Kernel pin](#kernel-pin-steam-machine)).
 8. **Update BIOS** - only on a Steam Machine, opt-in and at your own risk:
    installs the newest Steam Machine BIOS from Valve (see
    [BIOS updates](#bios-updates-steam-machine)).
@@ -290,6 +294,24 @@ it, DKMS rebuilds the driver whenever a kernel or its headers are installed
 or upgraded. A newly added kernel doesn't come with its headers, so
 `ensure-kernel-headers.service` checks at every boot and installs any
 missing `-headers` package, which makes DKMS build the driver for it.
+
+### Kernel pin (Steam Machine)
+
+With CachyOS kernels newer than 7.1.6 a Steam Machine reboots instead of
+shutting down. The **Pin the kernel** sub-option (ticked along with Steam
+Machine support) installs `linux-cachyos` and `linux-cachyos-headers`
+7.1.6-1 and adds them to `IgnorePkg` in `/etc/pacman.conf`, so updates skip
+them. DKMS builds the LED driver for it; restart to boot it.
+
+The packages (and their signatures, which pacman checks) are kept in
+`/var/cache/steamify/kernel`, so re-applying needs no download. Missing
+files are taken from pacman's cache, else downloaded from
+`archive.cachyos.org`, then `mirror.cachyos.org` (which only has the current
+kernel). Set `PINNED_KERNEL_URL` to a directory URL with the files to try
+another source first, or drop them into the kernel directory yourself.
+
+Unticking it removes the pin and runs `sudo pacman -Syu`, which brings the
+kernel back to CachyOS's current version; the files stay for next time.
 
 Troubleshooting:
 

@@ -5,10 +5,12 @@
 
 # Menu order. Components are turned on in this order and off in reverse;
 # gaming must come first (single user builds on it).
-COMPONENTS=(gaming boot theme glyphs single launcher machine bios)
+COMPONENTS=(gaming boot theme glyphs single launcher machine kpin bios)
 # One-off actions rather than on/off components: never preselected, never
 # re-applied, not listed as on or off.
 ACTIONS=(bios)
+# Sub-options, shown indented under their parent and only while it's ticked.
+declare -A PARENT=([boot]=gaming [kpin]=machine)
 # Never preselected on a first run: booting into the desktop is a choice,
 # gamescope is the default.
 NO_PRESELECT=(boot)
@@ -21,13 +23,14 @@ declare -A LABEL=(
     [single]="Single user mode: no password, lock screen or log out (SDDM)"
     [launcher]="Steamify shortcut: desktop icon to run this again"
     [machine]="Steam Machine support: LED bar driver, hardware settings in Steam"
+    [kpin]="Pin the kernel to $PINNED_KERNEL_VER (fixes rebooting after shutdown)"
     [bios]="Update BIOS"
 )
 declare -A CURRENT WANTED
 
 component_available() {
     case "$1" in
-        machine) machine_available ;;
+        machine|kpin) machine_available ;;
         bios) bios_available ;;
     esac
 }
@@ -41,10 +44,10 @@ boot_mode() {
 }
 
 menu_visible() {
-    # Shown in the menu. "Boot into" is a sub-option of the conversion: only
-    # while the conversion is ticked.
+    # Shown in the menu. A sub-option ("Boot into", the kernel pin) only
+    # while its parent is ticked.
     component_available "$1" || return 1
-    [[ "$1" != boot || "${WANTED[gaming]:-0}" == 1 ]]
+    [[ -z "${PARENT[$1]:-}" || "${WANTED[${PARENT[$1]}]:-0}" == 1 ]]
 }
 
 component_selectable() {
@@ -81,6 +84,9 @@ toggle_component() {
     if [[ "$c" == gaming && "${WANTED[gaming]}" == 0 ]]; then WANTED[single]=0; WANTED[boot]=0; fi
     # Where to boot to is part of the conversion, too.
     if [[ "$c" == boot && "${WANTED[boot]}" == 1 ]]; then WANTED[gaming]=1; fi
+    # The kernel pin is opt-out: ticked along with Steam Machine support.
+    if [[ "$c" == machine ]]; then WANTED[kpin]=${WANTED[machine]}; fi
+    if [[ "$c" == kpin && "${WANTED[kpin]}" == 1 ]]; then WANTED[machine]=1; fi
 }
 
 show_menu() {
@@ -103,6 +109,8 @@ show_menu() {
             [[ "${CURRENT[gaming]}" == 1 ]] || now="-"
             want="gaming"; [[ "${WANTED[boot]}" == 1 ]] && want="desk"
             printf "  %-3s %-6s %-6s   └ %s\n" "$i" "$now" "$want" "$(boot_choice "${WANTED[boot]}")"
+        elif [[ -n "${PARENT[$c]:-}" ]]; then
+            printf "  %-3s %b %-6s   └ %s\n" "$i" "$now" "$want" "${LABEL[$c]}"
         elif component_selectable "$c"; then
             printf "  %-3s %b %-6s %s\n" "$i" "$now" "$want" "${LABEL[$c]}"
         else
@@ -149,6 +157,8 @@ draw_menu_tui() {
             local mode=gamescope; [[ "${CURRENT[boot]}" == 1 ]] && mode=desktop
             state="  (${c_bold}←/→${c_reset} choose)"
             [[ "${CURRENT[gaming]}" == 1 ]] && state="  (now: $mode; ${c_bold}←/→${c_reset} choose)"
+        elif [[ -n "${PARENT[$c]:-}" ]]; then
+            line="    └ $line"
         fi
         if ! component_selectable "$c"; then
             # Greyed out: nothing to do (e.g. BIOS already up to date).

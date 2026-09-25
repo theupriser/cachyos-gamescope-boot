@@ -15,7 +15,7 @@
 set -uo pipefail
 
 # Release version, see CHANGELOG.md.
-VERSION=0.10.0
+VERSION=0.11.0
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -139,7 +139,7 @@ while true; do
 
     apply_changes
     # Login manager changes only take effect after a restart.
-    [[ " ${TO_DISABLE[*]} ${TO_ENABLE[*]} " =~ \ (gaming|single|boot)\  ]] &&
+    [[ " ${TO_DISABLE[*]} ${TO_ENABLE[*]} " =~ \ (gaming|single|boot|kpin)\  ]] &&
         RESTART_FOR_LOGIN=true
 
     echo
@@ -149,6 +149,9 @@ while true; do
         component_available "$c" && ! is_action "$c" || continue
         if [[ "$c" == boot ]]; then
             [[ "${CURRENT[gaming]}" == 1 ]] && echo "       └ boots into: $(boot_mode "${CURRENT[boot]}")"
+        elif [[ -n "${PARENT[$c]:-}" ]]; then
+            [[ "${CURRENT[${PARENT[$c]}]}" == 1 ]] || continue
+            if [[ "${CURRENT[$c]}" == 1 ]]; then echo -e "       └ ${c_green}on ${c_reset} ${LABEL[$c]}"; else echo "       └ off  ${LABEL[$c]}"; fi
         elif [[ "${CURRENT[$c]}" == 1 ]]; then echo -e "  ${c_green}on ${c_reset} ${LABEL[$c]}"; else echo "  off  ${LABEL[$c]}"; fi
     done
     if [[ ${#FAILED[@]} -gt 0 ]]; then

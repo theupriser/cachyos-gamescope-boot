@@ -14,38 +14,126 @@ detect_valve_fremont() {
         [[ "$vendor" == "OEM" && "$product" == "F7F" ]]
 }
 
+# Kernel pinned on a Steam Machine: with newer linux-cachyos releases it
+# reboots instead of shutting down. The packages are kept in
+# PINNED_KERNEL_DIR, so re-applying (or reinstalling after an update slipped
+# through) needs no download.
+PINNED_KERNEL_VER="7.1.6-1"
+PINNED_KERNEL_KVER="7.1.6-1-cachyos"
+PINNED_KERNEL_PKGS=(linux-cachyos linux-cachyos-headers)
+PINNED_KERNEL_DIR="${PINNED_KERNEL_DIR:-/var/cache/steamify/kernel}"
+# Tried in order, after the kernel dir and pacman's cache. The archive keeps
+# every release; the mirror only the current one. PINNED_KERNEL_URL puts
+# another source (a directory holding the files) in front.
+PINNED_KERNEL_SOURCES=(
+    ${PINNED_KERNEL_URL:+"$PINNED_KERNEL_URL"}
+    "https://archive.cachyos.org/archive/cachyos"
+    "https://mirror.cachyos.org/repo/x86_64/cachyos"
+)
+
+pinned_kernel_installed() {
+    local p
+    for p in "${PINNED_KERNEL_PKGS[@]}"; do
+        [[ "$(pacman -Q "$p" 2>/dev/null)" == "$p $PINNED_KERNEL_VER" ]] || return 1
+    done
+}
+
+fetch_pinned_kernel_file() {
+    # $1 = file name. Local kernel dir first, then pacman's cache, then the
+    # download sources. Downloads go to a .part file so a broken one is never
+    # mistaken for a finished one.
+    local f="$1" dest="$PINNED_KERNEL_DIR/$1" src
+    [[ -s "$dest" ]] && return 0
+    if [[ -s "/var/cache/pacman/pkg/$f" ]]; then
+        sudo cp "/var/cache/pacman/pkg/$f" "$dest" && return 0
+    fi
+    for src in "${PINNED_KERNEL_SOURCES[@]}"; do
+        if sudo curl -fL --retry 2 --connect-timeout 15 -o "$dest.part" "$src/$f" 2>/dev/null; then
+            sudo mv "$dest.part" "$dest"
+            return 0
+        fi
+        warn "Couldn't get $f from $src, trying the next source..."
+    done
+    sudo rm -f "$dest.part"
+    return 1
+}
+
+pin_kernel_in_pacman_conf() {
+    # Adds our packages to IgnorePkg in [options], keeping what's there.
+    local p
+    for p in "${PINNED_KERNEL_PKGS[@]}"; do
+        grep -Eq "^IgnorePkg\s*=.*(\s|=)$p(\s|$)" /etc/pacman.conf && continue
+        if grep -Eq '^IgnorePkg\s*=' /etc/pacman.conf; then
+            sudo sed -i -E "0,/^IgnorePkg\s*=/s/^(IgnorePkg\s*=.*)$/\1 $p/" /etc/pacman.conf
+        else
+            sudo sed -i -E "0,/^\[options\]/s//[options]\nIgnorePkg = $p/" /etc/pacman.conf
+        fi
+    done
+}
+
+unpin_kernel_in_pacman_conf() {
+    local p
+    for p in "${PINNED_KERNEL_PKGS[@]}"; do
+        sudo sed -i -E "/^IgnorePkg\s*=/s/\s$p(\s|$)/\1/" /etc/pacman.conf
+    done
+    # Drop the line if nothing is left on it.
+    sudo sed -i -E '/^IgnorePkg\s*=\s*$/d' /etc/pacman.conf
+}
+
 install_pinned_kernel() {
-    # Define urls for downloading the kernel and it's headers
-    local KERNEL_URL="https://archive.cachyos.org/archive/cachyos/linux-cachyos-7.1.6-1-x86_64.pkg.tar.zst"
-    local KERNEL_SIG_URL="https://archive.cachyos.org/archive/cachyos/linux-cachyos-7.1.6-1-x86_64.pkg.tar.zst.sig"
-    local HEADERS_URL="https://archive.cachyos.org/archive/cachyos/linux-cachyos-headers-7.1.6-1-x86_64.pkg.tar.zst"
-    local HEADERS_SIG_URL="https://archive.cachyos.org/archive/cachyos/linux-cachyos-headers-7.1.6-1-x86_64.pkg.tar.zst.sig"
-
-    # Resolve filenames
-    local KERNEL_PKG=$(basename "$KERNEL_URL")
-    local HEADERS_PKG=$(basename "$HEADERS_URL")
-
-    info "Downloading CachyOS kernel packages and headers..."
-    wget -c "$KERNEL_URL" "$KERNEL_SIG_URL" "$HEADERS_URL" "$HEADERS_SIG_URL" || { err "Failed to download kernel packages."; return 1; }
-
-    info "Installing packages and verifying signatures via pacman..."
-    sudo pacman -U --noconfirm "$KERNEL_PKG" "$HEADERS_PKG" || { err "Failed to install packages."; return 1; }
-
-    info "Locking the kernel packages to prevent updates..."
-    sudo sed -i '/^IgnorePkg/s/ linux-cachyos linux-cachyos-headers//' /etc/pacman.conf
-    sudo sed -i '/^#IgnorePkg/s/^#//' /etc/pacman.conf
-    sudo sed -i '/^IgnorePkg/ s/$/ linux-cachyos linux-cachyos-headers/' /etc/pacman.conf
-
-    # FIX: Recover symlinks directly to accompany led install
-    local CURRENT_KVER="7.1.6-1-cachyos"
-    if [ -d "/usr/src/linux-${CURRENT_KVER}" ]; then
-        info "Koppelen van kernel-headers symlink..."
-        sudo ln -snf "/usr/src/linux-${CURRENT_KVER}" "/usr/lib/modules/${CURRENT_KVER}/build"
+    sudo mkdir -p "$PINNED_KERNEL_DIR"
+    pin_kernel_in_pacman_conf
+    if pinned_kernel_installed; then
+        ok "Kernel $PINNED_KERNEL_VER already installed and pinned."
+        return 0
     fi
 
-    rm -f "$KERNEL_PKG" "${KERNEL_PKG}.sig" "$HEADERS_PKG" "${HEADERS_PKG}.sig"
-    ok "Custom kernel setup finished."
+    local p f files=()
+    info "Getting kernel $PINNED_KERNEL_VER (kept in $PINNED_KERNEL_DIR)..."
+    for p in "${PINNED_KERNEL_PKGS[@]}"; do
+        f="$p-$PINNED_KERNEL_VER-x86_64.pkg.tar.zst"
+        fetch_pinned_kernel_file "$f" && fetch_pinned_kernel_file "$f.sig" ||
+            { err "Couldn't download $f from any source."; return 1; }
+        files+=("$PINNED_KERNEL_DIR/$f")
+    done
+
+    # pacman checks each package against the .sig next to it.
+    info "Installing kernel $PINNED_KERNEL_VER..."
+    if ! sudo pacman -U --noconfirm "${files[@]}"; then
+        err "Installing kernel $PINNED_KERNEL_VER failed. If a file is damaged, delete it from $PINNED_KERNEL_DIR and try again."
+        return 1
+    fi
+    [[ "$(uname -r)" != "$PINNED_KERNEL_KVER" ]] && RESTART_FOR_LOGIN=true
+    ok "Kernel $PINNED_KERNEL_VER installed and pinned (restart to use it)."
 }
+
+remove_kernel_pin() {
+    # Back to CachyOS's current kernel. The packages stay in
+    # PINNED_KERNEL_DIR, so turning support on again doesn't download.
+    unpin_kernel_in_pacman_conf
+    pinned_kernel_installed || return 0
+    info "Updating the kernel back to CachyOS's current version..."
+    sudo pacman -Syu --noconfirm ||
+        { warn "Updating the kernel failed; run: sudo pacman -Syu"; return 0; }
+    RESTART_FOR_LOGIN=true
+}
+
+# "Pin the kernel" menu item, a sub-option of Steam Machine support.
+kpin_status() {
+    pinned_kernel_installed && grep -Eq '^IgnorePkg\s*=.*\slinux-cachyos(\s|$)' /etc/pacman.conf
+}
+
+kpin_enable() {
+    install_pinned_kernel || return 1
+    # The DKMS pacman hook built leds-valve for the new headers; make sure.
+    if pacman -Qi leds-valve-dkms-git >/dev/null 2>&1 &&
+        ! dkms status -k "$PINNED_KERNEL_KVER" leds-valve-dkms 2>/dev/null | grep -q installed; then
+        sudo dkms install leds-valve-dkms/0.1 -k "$PINNED_KERNEL_KVER" ||
+            warn "Building the LED driver for $PINNED_KERNEL_KVER failed."
+    fi
+}
+
+kpin_disable() { remove_kernel_pin; }
 
 install_kernel_headers() {
     # DKMS can only build leds-valve against kernels whose headers are
@@ -53,19 +141,18 @@ install_kernel_headers() {
     # ...); install the matching -headers package for every one present.
     local -a kernels headers=()
     local k
-    local target_kver="7.1.6-1-cachyos"
-
-    # FIX: Als de specifieke 7.1.6 headers al lokaal op de schijf staan, hoeft pacman niks te doen
-    if [ -d "/usr/src/linux-${target_kver}" ] || [ -d "/usr/lib/modules/${target_kver}/build" ]; then
-        info "Geverifieerd: Gevolgde CachyOS 7.1.6 headers zijn reeds lokaal aanwezig. Pacman-update overgeslagen."
-        return 0
-    fi
-
-    # Originele fallback-loop voor het geval er andere kernels actief zijn
     mapfile -t kernels < <(pacman -Qqo /usr/lib/modules/*/pkgbase 2>/dev/null | sort -u)
+    # Installed headers are left alone: -S would update them past a pinned
+    # kernel (linux-cachyos-headers on a Steam Machine).
+    local have=0
     for k in "${kernels[@]}"; do
+        pacman -Q "${k}-headers" >/dev/null 2>&1 && { have=$((have + 1)); continue; }
         pacman -Si "${k}-headers" >/dev/null 2>&1 && headers+=("${k}-headers")
     done
+    if [[ ${#headers[@]} -eq 0 && $have -gt 0 ]]; then
+        ok "Kernel headers already installed."
+        return 0
+    fi
     if [[ ${#headers[@]} -eq 0 ]]; then
         warn "Couldn't work out which kernel headers package you need."
         warn "Install the -headers package for your kernel (e.g. linux-cachyos-headers) yourself."
@@ -243,9 +330,6 @@ machine_status() {
 }
 
 machine_enable() {
-    # Install and pin the specific CachyOS kernel first
-    install_pinned_kernel || { err "Custom kernel setup failed."; return 1; }
-    
     ensure_aur_helper || { warn "Couldn't set up an AUR helper automatically. Install yay or paru, then run the wizard again."; return 1; }
     install_valve_led_driver || { warn "LED driver setup ran into a problem - see errors above."; return 1; }
     install_headers_boot_check
@@ -282,9 +366,6 @@ EOF
 
 machine_disable() {
     info "Removing Steam Machine support..."
-    # Disables services, removes packages, and unpins the kernel
-    sudo sed -i '/^IgnorePkg/s/ linux-cachyos linux-cachyos-headers//' /etc/pacman.conf
-    sudo pacman -Syu --noconfirm linux-cachyos linux-cachyos-headers || { warn "Kernel upgrade issues."; }
     systemctl --user disable --now steamos-manager.service 2>/dev/null
     sudo systemctl disable --now steamos-manager.service 2>/dev/null
     sudo systemctl disable --now inputplumber.service 2>/dev/null

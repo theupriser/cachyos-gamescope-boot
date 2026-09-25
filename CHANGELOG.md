@@ -5,6 +5,20 @@ All notable changes, per version and per commit. Versions follow
 `steamify.sh`. Versions before 0.7.0 were numbered afterwards,
 one per merged pull request.
 
+## 0.11.0 - 2026-09-25
+
+- **feat: Pin the kernel to 7.1.6-1 on a Steam Machine**
+  - New sub-option under Steam Machine support, ticked along with it (opt
+    out): newer CachyOS kernels make the Steam Machine reboot instead of
+    shutting down. Installs `linux-cachyos` and `-headers` 7.1.6-1 and adds
+    them to `IgnorePkg`; unticking removes the pin and updates the system.
+  - The packages are kept in `/var/cache/steamify/kernel` and reinstalled
+    from there without downloading; else from pacman's cache, the CachyOS
+    archive, the CachyOS mirror, or `PINNED_KERNEL_URL`.
+  - Installed kernel headers are no longer updated by the wizard, so the
+    pinned kernel keeps matching headers.
+  - The BIOS item moves down one (9 on a Steam Machine).
+
 ## 0.10.0 - 2026-09-24
 
 - `0f503dd` **feat: Boot into gamescope or the desktop**
