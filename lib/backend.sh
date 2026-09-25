@@ -79,7 +79,7 @@ backend_run_component() {
     rc=$?
     # Let the log reader finish before the next event.
     wait $! 2>/dev/null
-    backend_event done "\"id\":$(json_str "$c"),\"ok\":$([[ $rc -eq 0 ]] && echo true || echo false)"
+    backend_event "done" "\"id\":$(json_str "$c"),\"ok\":$([[ $rc -eq 0 ]] && echo true || echo false)"
     return $rc
 }
 
