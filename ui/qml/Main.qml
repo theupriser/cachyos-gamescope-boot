@@ -492,25 +492,35 @@ ApplicationWindow {
                 Column {
                     x: 772; width: parent.width - 772; height: parent.height; spacing: 16
                     Rectangle {
+                        id: detail
                         width: parent.width; height: parent.height - sys.height - 16; radius: 16; color: t.card
                         readonly property var it: sel < rows.length ? rows[sel] : null
                         readonly property var tx: it ? (texts[it.id] || {}) : {}
-                        Column {
-                            anchors.fill: parent; anchors.margins: 24; spacing: 14
-                            visible: parent.it !== null
-                            Row { spacing: 10
-                                Chip { text: parent.parent.parent.it ? (parent.parent.parent.it.kind === "choice" ? (boot === "desktop" ? "Desktop" : "Gaming") : (parent.parent.parent.it.kind === "action" ? "Opt-in" : (parent.parent.parent.it.on ? "On" : "Off"))) : ""
-                                       fg: parent.parent.parent.it && parent.parent.parent.it.on ? t.good : "#b8c3d1"; bgc: parent.parent.parent.it && parent.parent.parent.it.on ? t.goodBg : t.line }
-                                Chip { visible: !!parent.parent.parent.tx.experimental; text: "Experimental"; fg: t.warn; bgc: t.warnBg }
+                        // Long texts scroll instead of running out of the card;
+                        // each item starts at the top.
+                        onItChanged: detailFlick.contentY = 0
+                        Flickable {
+                            id: detailFlick
+                            anchors.fill: parent; anchors.margins: 24; anchors.rightMargin: 12
+                            visible: detail.it !== null; clip: true
+                            contentHeight: detailCol.implicitHeight; boundsBehavior: Flickable.StopAtBounds
+                            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                            Column {
+                                id: detailCol; width: detailFlick.width - 12; spacing: 14
+                                Row { spacing: 10
+                                    Chip { text: detail.it ? (detail.it.kind === "choice" ? (boot === "desktop" ? "Desktop" : "Gaming") : (detail.it.kind === "action" ? "Opt-in" : (detail.it.on ? "On" : "Off"))) : ""
+                                           fg: detail.it && detail.it.on ? t.good : "#b8c3d1"; bgc: detail.it && detail.it.on ? t.goodBg : t.line }
+                                    Chip { visible: !!detail.tx.experimental; text: "Experimental"; fg: t.warn; bgc: t.warnBg }
+                                }
+                                Text { text: detail.it ? label(detail.it) : ""; color: t.text; font.family: t.display; font.pixelSize: 26; font.weight: Font.DemiBold; wrapMode: Text.WordWrap; width: parent.width }
+                                Text { text: detail.tx.body || ""; color: t.soft; font.family: t.body; font.pixelSize: 15; lineHeight: 1.4; wrapMode: Text.WordWrap; width: parent.width }
+                                Text { text: "WHAT IT CHANGES"; color: t.faint; font.family: t.body; font.pixelSize: 12; font.weight: Font.DemiBold; font.letterSpacing: 0.8; topPadding: 4 }
+                                Repeater { model: detail.tx.changes || []
+                                    Text { required property string modelData; text: "•  " + modelData; color: t.soft; font.family: t.body; font.pixelSize: 14; wrapMode: Text.WordWrap; width: detailCol.width } }
                             }
-                            Text { text: parent.parent.it ? label(parent.parent.it) : ""; color: t.text; font.family: t.display; font.pixelSize: 26; font.weight: Font.DemiBold; wrapMode: Text.WordWrap; width: parent.width }
-                            Text { text: parent.parent.tx.body || ""; color: t.soft; font.family: t.body; font.pixelSize: 15; lineHeight: 1.4; wrapMode: Text.WordWrap; width: parent.width }
-                            Text { text: "WHAT IT CHANGES"; color: t.faint; font.family: t.body; font.pixelSize: 12; font.weight: Font.DemiBold; font.letterSpacing: 0.8; topPadding: 4 }
-                            Repeater { model: parent.parent.tx.changes || []
-                                Text { required property string modelData; text: "•  " + modelData; color: t.soft; font.family: t.body; font.pixelSize: 14; wrapMode: Text.WordWrap; width: parent.width } }
                         }
                         Column {
-                            anchors.centerIn: parent; spacing: 8; visible: parent.it === null
+                            anchors.centerIn: parent; spacing: 8; visible: detail.it === null
                             Text { text: plan.length === 0 && computePlan().length === 0 ? "Everything is the way you want it" : "Review what will change"; color: t.text; font.family: t.display; font.pixelSize: 24; anchors.horizontalCenter: parent.horizontalCenter }
                             Text { text: "then apply it"; color: t.mute; font.family: t.body; font.pixelSize: 15; anchors.horizontalCenter: parent.horizontalCenter }
                         }
