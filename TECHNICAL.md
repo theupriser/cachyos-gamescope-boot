@@ -32,6 +32,17 @@ the Session dropdown with Log Out. (Restricting `action/logout` would also
 hide Restart and Shut Down.) Turning it off restores all of that and moves
 the conversion back to plasma-login-manager.
 
+**KDE wallet.** KDE normally unlocks your wallet with the password you log in
+with; with autologin nobody types it, so apps that keep passwords in it (Brave,
+for example) ask for the wallet password. Single user mode does what SteamOS
+does: it uses Valve's empty wallet without a password (from
+`steamdeck-kde-presets`, checksum verified). Your own wallet in
+`~/.local/share/kwalletd/` is moved to `kdewallet.kwl.bak-steamify` (and
+`.salt`). Turning single user mode off puts it back, unchanged; the single
+user wallet, with anything saved in it meanwhile, is kept as
+`kdewallet.kwl.steamify-single-user` and used again the next time it's on.
+Passwords aren't shared between the two wallets.
+
 **SDDM** is what SteamOS uses, and CachyOS's `steam-set-session` supports it
 directly: it writes `/etc/sddm.conf.d/zz-steamos-autologin.conf`, which SDDM
 honours. The script installs and enables `sddm` (active from the next boot),
@@ -123,9 +134,7 @@ taken from the newest `steamdeck-kde-presets` on Valve's SteamOS mirror
 - **Nested Desktop**: add it to Steam from the launcher, then start it in
   gaming mode for a Plasma desktop inside gaming mode;
 - the SteamOS **Return to Gaming Mode** icon (Steam logo with a return arrow);
-- a window rule that keeps the **Steam keyboard** above other windows;
-- an empty, password-less **KWallet**, only if you don't have a wallet yet,
-  so nothing asks for a wallet password after autologin.
+- a window rule that keeps the **Steam keyboard** above other windows.
 
 Turning it off restores your previous look and panel layout, and removes `cachyos-vapor` again
 if the wizard installed it (and nothing else, like `cachyos-handheld`, needs it).

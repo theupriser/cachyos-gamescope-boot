@@ -3,7 +3,7 @@
 # newest Valve steamdeck-kde-presets package: "Add to Steam" (file
 # right-click menu and launcher), Nested Desktop (Plasma as a game inside
 # gaming mode), the "Return to Gaming Mode" icon, the Steam Keyboard window
-# rule and an empty KWallet. Part of the SteamOS theme component
+# rule. Part of the SteamOS theme component
 # (lib/vapor-theme.sh). System files go to /usr/local (nothing
 # package-owned); per-user settings go through the undo journal.
 # Sourced by steamify.sh; not meant to be run on its own.
@@ -75,15 +75,6 @@ extras_enable() {
     sudo cp -r "$src/share/applications/steam/holo-nested-desktop" "$NESTED_DIR"
     sudo sed -i "s|/usr/share/applications/steam/holo-nested-desktop|$NESTED_DIR|" "$NESTED_DIR/holo-nested-desktop.desktop"
 
-    # An empty, password-less wallet (Valve's), so nothing asks for a wallet
-    # password: with autologin nobody typed one to unlock it. Only when the
-    # user has no wallet yet; an existing one is never touched.
-    local wallet="${XDG_DATA_HOME:-$HOME/.local/share}/kwalletd"
-    if [[ ! -f "$wallet/kdewallet.kwl" ]]; then
-        mkdir -p "$wallet"
-        install -m 600 "$src/share/kwalletd/kdewallet.kwl" "$src/share/kwalletd/kdewallet.salt" "$wallet/"
-        kset theme kwalletrc Wallet "First Use" false
-    fi
     rm -rf "$tmp_dir"
 
     sudo gtk-update-icon-cache -q -f -t /usr/local/share/icons/hicolor 2>/dev/null || true
@@ -122,7 +113,6 @@ extras_disable() {
     for pkg in kdialog zstd curl; do
         [[ -n "$(state_get theme "installed_$pkg")" ]] && sudo pacman -R --noconfirm "$pkg" >/dev/null 2>&1
     done
-    # The keyboard rule and kwalletrc are reverted by the theme's journal.
-    # The wallet itself stays: secrets may have been saved in it since.
+    # The keyboard rule is reverted by the theme's journal.
     return 0
 }

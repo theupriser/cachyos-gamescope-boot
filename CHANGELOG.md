@@ -25,6 +25,13 @@ one per merged pull request.
 - **docs: Shorter README, with a Steam Machine section**
   - How it works moved to `TECHNICAL.md`, problems to `TROUBLESHOOTING.md`;
     the README links to them and to the files it mentions.
+- **feat: No more KDE wallet password prompts in single user mode**
+  - Uses Valve's empty, password-less wallet, like SteamOS; apps such as
+    Brave no longer ask for the wallet password after autologin.
+  - Your own wallet is moved to `kdewallet.kwl.bak-steamify` and comes back,
+    unchanged, when single user mode is off; the single user wallet is kept
+    and reused next time.
+  - Moved from the SteamOS theme, where it only helped without any wallet.
 - **docs: LICENSE.md** with the MIT license the README already named.
 - **chore: No more `setup-gamescope-boot.sh` release asset**
   - Only `steamify.sh` is published; the old name from before 0.9.0 is gone.

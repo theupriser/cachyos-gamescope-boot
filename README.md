@@ -21,8 +21,9 @@ Steam Machine.
    **Add to Steam** in right-click menus
    ([details](TECHNICAL.md#steamos-desktop-look)).
 3. **Steam Deck/Machine icons** - Steam Deck button icons in gaming mode.
-4. **Single user mode** - like SteamOS: never a login or lock screen. Typing a
-   password with a controller is no fun
+4. **Single user mode** - like SteamOS: never a login or lock screen, and no
+   KDE wallet password prompts (e.g. from Brave). Typing a password with a
+   controller is no fun
    ([details](TECHNICAL.md#single-user-mode-sddm-no-locking)).
 5. **Steamify shortcut** - an icon on the desktop and in the launcher that
    opens the newest Steamify, so you don't need the install command again.

@@ -9,6 +9,78 @@ single_status() {
     [[ "$(kreadconfig6 --file kdeglobals --group "KDE Action Restrictions" --key action/lock_screen)" == false ]]
 }
 
+WALLET_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/kwalletd"
+# The user's own wallet while single user mode is on, and ours after.
+WALLET_BACKUP=".bak-steamify"
+WALLET_OURS=".steamify-single-user"
+
+stop_kwallet() {
+    # The wallet daemon keeps the file open and would write it back.
+    local d
+    for d in kwalletd6 ksecretd; do
+        pkill -u "$USER" -x "$d" 2>/dev/null && sleep 1
+    done
+    return 0
+}
+
+single_wallet_enable() {
+    # Like SteamOS: an empty, password-less wallet (Valve's own file), so
+    # nothing asks for a wallet password (e.g. Brave at start): with
+    # autologin nobody typed the login password that unlocks the usual one.
+    # The user's wallet is moved aside and comes back when this is off. The
+    # wallet from an earlier time in single user mode is reused, with
+    # whatever was saved in it then.
+    local tmp f
+    if [[ -f "$WALLET_DIR/kdewallet.kwl$WALLET_OURS" ]]; then
+        stop_kwallet
+        for f in kdewallet.kwl kdewallet.salt; do
+            [[ -f "$WALLET_DIR/$f" && ! -e "$WALLET_DIR/$f$WALLET_BACKUP" ]] &&
+                mv "$WALLET_DIR/$f" "$WALLET_DIR/$f$WALLET_BACKUP"
+            [[ -f "$WALLET_DIR/$f$WALLET_OURS" ]] && mv -f "$WALLET_DIR/$f$WALLET_OURS" "$WALLET_DIR/$f"
+        done
+        kset single kwalletrc Wallet "First Use" false
+        ok "Single user mode's wallet (no password) is back; your own is kept as kdewallet.kwl$WALLET_BACKUP."
+        return 0
+    fi
+    tmp="$(mktemp -d)"
+    if ! fetch_valve_presets "$tmp"; then
+        rm -rf "$tmp"
+        warn "Couldn't get Valve's empty wallet; apps may still ask for the wallet password."
+        return 0
+    fi
+    if [[ -f "$WALLET_DIR/kdewallet.kwl" ]] &&
+        cmp -s "$WALLET_DIR/kdewallet.kwl" "$tmp/usr/share/kwalletd/kdewallet.kwl"; then
+        rm -rf "$tmp"
+        return 0
+    fi
+    stop_kwallet
+    mkdir -p "$WALLET_DIR"
+    for f in kdewallet.kwl kdewallet.salt; do
+        # Never overwrite an earlier backup: that one is the user's.
+        [[ -f "$WALLET_DIR/$f" && ! -e "$WALLET_DIR/$f$WALLET_BACKUP" ]] &&
+            mv "$WALLET_DIR/$f" "$WALLET_DIR/$f$WALLET_BACKUP"
+        install -m 600 "$tmp/usr/share/kwalletd/$f" "$WALLET_DIR/$f"
+    done
+    rm -rf "$tmp"
+    kset single kwalletrc Wallet "First Use" false
+    [[ -f "$WALLET_DIR/kdewallet.kwl$WALLET_BACKUP" ]] &&
+        info "Your wallet is kept as $WALLET_DIR/kdewallet.kwl$WALLET_BACKUP and comes back when single user mode is off."
+    ok "Empty wallet without a password: apps no longer ask for the wallet password."
+}
+
+single_wallet_disable() {
+    # The user's wallet back; ours (maybe with passwords saved since) is
+    # kept next to it.
+    [[ -f "$WALLET_DIR/kdewallet.kwl$WALLET_BACKUP" ]] || return 0
+    stop_kwallet
+    local f
+    for f in kdewallet.kwl kdewallet.salt; do
+        [[ -f "$WALLET_DIR/$f" ]] && mv -f "$WALLET_DIR/$f" "$WALLET_DIR/$f$WALLET_OURS"
+        [[ -f "$WALLET_DIR/$f$WALLET_BACKUP" ]] && mv "$WALLET_DIR/$f$WALLET_BACKUP" "$WALLET_DIR/$f"
+    done
+    ok "Your own wallet is back (the empty one is kept as kdewallet.kwl$WALLET_OURS)."
+}
+
 single_launcher() {
     # Launcher: only Sleep / Restart / Shut Down, no Session dropdown (where
     # Log Out lives). Restricting action/logout instead would also hide
@@ -42,6 +114,7 @@ single_enable() {
     single_launcher
 
     restart_plasmashell_if_stopped
+    single_wallet_enable
     ok "Single user: no lock screen, user switching or log out."
 }
 
@@ -70,5 +143,6 @@ single_disable() {
         done
     fi
     restart_plasmashell_if_stopped
+    single_wallet_disable
     ok "KDE's normal lock screen and user switching are back."
 }
