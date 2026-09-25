@@ -186,7 +186,8 @@ SHA-256 in Valve's package index:
 
 It works with any `/dev/cec*`: a GPU that has CEC on its HDMI port (the
 Steam Machine; the CachyOS kernel has DisplayPort CEC built in) or a USB
-adapter. The menu lists the CEC devices found. Also turn on CEC on the TV
+adapter ([CEC.md](CEC.md) lists which PCs have one). The menu lists the CEC
+devices found. Also turn on CEC on the TV
 (Sony: BRAVIA Sync, Samsung: Anynet+, LG: SimpLink). On a Steam Machine
 `steamos-manager` writes cecd's settings from Steam's (wake the TV, put it to
 sleep), in `~/.config/cecd/config.d/`, and Steam shows its HDMI-CEC

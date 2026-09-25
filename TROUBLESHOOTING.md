@@ -45,8 +45,8 @@ journalctl --user -u cecd -b
 cec-ctl -d /dev/cec0 -S        # the devices on the TV's CEC bus (v4l-utils)
 ```
 
-No `/dev/cec*`: your GPU's HDMI port has no CEC; a USB CEC adapter
-(e.g. Pulse-Eight) works. The Steam Machine wakes up again right after going
+No `/dev/cec*`: your PC has no CEC; a USB CEC adapter (e.g. Pulse-Eight)
+works. See [CEC.md](CEC.md). The Steam Machine wakes up again right after going
 to sleep, or other devices lose CEC? That happens on SteamOS too; turn
 HDMI-CEC off in the wizard.
 

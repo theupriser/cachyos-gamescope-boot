@@ -29,9 +29,10 @@ Steam Machine.
    opens the newest Steamify, so you don't need the install command again.
 6. **HDMI-CEC** (experimental; off by default, on by default on a Steam
    Machine) - use Steam with your TV's
-   remote, and the TV turns on and off with the PC. Needs a GPU with CEC (like
-   the Steam Machine) or a USB CEC adapter
-   ([details](TECHNICAL.md#hdmi-cec)).
+   remote, and the TV turns on and off with the PC. Needs a PC with CEC (like
+   the Steam Machine) or a USB CEC adapter; most graphics cards, NVIDIA
+   included, don't have it. See [CEC.md](CEC.md) for which PCs do, and how to
+   add it to your own build ([details](TECHNICAL.md#hdmi-cec)).
 
 ## Steam Machine
 
