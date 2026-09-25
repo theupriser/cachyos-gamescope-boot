@@ -173,9 +173,12 @@ gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
   download would run an empty script and count as success.
 - HDMI refresh boost (`hdmi`, `lib/hdmi-refresh.sh`): a sub-option of
   `machine` (like `kpin` and `bios`), only on Fremont with the pinned kernel
-  (stays visible while on); unticking `kpin` unticks it. It needs someone at the
-  screen: the graphical app's backend (`BACKEND=true`) must refuse it, and every step needs a "y" within 15 s
-  (`WIZARD_HDMI_CONFIRM_SECONDS` for scripted tests). debugfs is root-only
+  (stays visible while on); unticking `kpin` unticks it. It needs someone at
+  the screen. Terminal: every step needs a "y" within 15 s
+  (`WIZARD_HDMI_CONFIRM_SECONDS` for scripted tests). App: its own screen
+  (`hdmi-options`, `hdmi-try`, `hdmi-reset` backend commands, the EDID cached
+  in `$XDG_RUNTIME_DIR/steamify-hdmi`), then `apply --hdmi
+  <output>=<w>x<h>:<rates>`; without `--hdmi` the backend refuses it. debugfs is root-only
   (glob it under sudo), and `edid_override` takes exactly `reset` with no
   newline. Build the EDID from the DDC read, not from sysfs: a live override
   replaces the kernel's copy. The kernel command-line value holds a path, so

@@ -121,54 +121,102 @@ bios_fits_device() {
     grep -q '"Guid"' <<< "$details" && ! grep -q '"UpdateError"' <<< "$details"
 }
 
-bios_enable() {
+# The checked firmware waits here between bios_prepare and bios_flash, so the
+# app can show its warnings in between (and the terminal flow uses it too).
+BIOS_STAGE_DIR="${XDG_RUNTIME_DIR:-/tmp}/steamify-bios"
+
+bios_prepare() {
+    # Downloads Valve's package, checks its SHA-256 and extracts the .cab to
+    # $BIOS_STAGE_DIR, then asks fwupd whether it fits this machine. Sets
+    # BIOS_COMPATIBLE (yes|dry-run). 0 = ready to flash, 2 = nothing to do
+    # (already the newest), 1 = error (nothing was touched).
     if ! bios_lookup_newest; then
         err "Couldn't find the newest Steam Machine BIOS on Valve's mirror ($VALVE_MIRROR)."
         return 1
     fi
-    local current tmp compatible
-    current="$(bios_current)"
     [[ -n "$BIOS_DRY_RUN" ]] && warn "DRY RUN (WIZARD_BIOS_DRY_RUN): nothing will be flashed."
-    if [[ "$current" == "$BIOS_NEWEST" ]]; then
-        ok "The BIOS is already the newest version ($current); nothing to do."
-        return 0
+    if [[ "$(bios_current)" == "$BIOS_NEWEST" ]]; then
+        ok "The BIOS is already the newest version ($BIOS_NEWEST); nothing to do."
+        return 2
     fi
-
-    # Download and check everything before asking: the warnings only come
-    # when the file is Valve's (SHA-256 from Valve's repo database) and fwupd
-    # confirms it's firmware for this very machine.
     pacman -Q fwupd >/dev/null 2>&1 || sudo pacman -S --needed --noconfirm fwupd ||
         { err "Installing fwupd failed."; return 1; }
-    tmp="$(mktemp -d)"
+    rm -rf "$BIOS_STAGE_DIR"; mkdir -p "$BIOS_STAGE_DIR"; chmod 700 "$BIOS_STAGE_DIR"
     info "Downloading $BIOS_PKG ($BIOS_REPO)..."
-    if ! curl -fsSL "$VALVE_MIRROR/$BIOS_REPO/os/x86_64/$BIOS_PKG" -o "$tmp/pkg.tar.zst" ||
-        ! echo "$BIOS_SHA256  $tmp/pkg.tar.zst" | sha256sum -c --quiet - ||
-        ! tar -I unzstd -xf "$tmp/pkg.tar.zst" -C "$tmp" "$BIOS_CAB"; then
+    if ! curl -fsSL "$VALVE_MIRROR/$BIOS_REPO/os/x86_64/$BIOS_PKG" -o "$BIOS_STAGE_DIR/pkg.tar.zst" ||
+        ! echo "$BIOS_SHA256  $BIOS_STAGE_DIR/pkg.tar.zst" | sha256sum -c --quiet - ||
+        ! tar -I unzstd -xf "$BIOS_STAGE_DIR/pkg.tar.zst" -C "$BIOS_STAGE_DIR" "$BIOS_CAB"; then
         err "Downloading or verifying $BIOS_PKG failed; the BIOS was not touched."
-        rm -rf "$tmp"
+        rm -rf "$BIOS_STAGE_DIR"
         return 1
     fi
     ok "Checksum OK: this is Valve's $BIOS_PKG."
-    local yes="$c_green$c_bold" b="$c_bold" n="$c_reset"
     if [[ -n "$BIOS_DRY_RUN" ]]; then
         warn "Dry run: skipping fwupd's check that the firmware fits this machine."
-        compatible="${c_yellow}${b}not checked${n} (dry run)"
-    elif bios_fits_device "$tmp/$BIOS_CAB"; then
+        BIOS_COMPATIBLE=dry-run
+    elif bios_fits_device "$BIOS_STAGE_DIR/$BIOS_CAB"; then
         ok "fwupd confirms BIOS $BIOS_NEWEST is firmware for this machine."
-        compatible="${yes}yes${n} (checked by fwupd)"
+        BIOS_COMPATIBLE=yes
     else
         err "fwupd says BIOS $BIOS_NEWEST is not for this machine's hardware; not installing it."
-        rm -rf "$tmp"
+        rm -rf "$BIOS_STAGE_DIR"
         return 1
     fi
+    printf '%s\n' "$BIOS_NEWEST" "$BIOS_CAB" > "$BIOS_STAGE_DIR/ready"
+}
 
+bios_flash() {
+    # Hands the firmware bios_prepare checked to fwupd; it is written during
+    # the next restart. Sets BIOS_NEEDS_RESTART.
+    local newest cab
+    { read -r newest; read -r cab; } < "$BIOS_STAGE_DIR/ready" 2>/dev/null
+    if [[ -z "${cab:-}" || ! -f "$BIOS_STAGE_DIR/$cab" ]]; then
+        err "No checked BIOS file waiting; nothing was flashed."
+        return 1
+    fi
+    if [[ -n "$BIOS_DRY_RUN" ]]; then
+        ok "Dry run: would run: fwupdmgr install -y --no-reboot-check $(basename "$cab")"
+        ok "Dry run finished; nothing was flashed."
+        # Treated as staged, so the restart choices that follow a real
+        # update show up too; restarting only prints (see restart_now).
+        BIOS_NEEDS_RESTART=1
+        rm -rf "$BIOS_STAGE_DIR"
+        return 0
+    fi
+    info "Handing BIOS $newest to fwupd. Do NOT turn off the power from now on."
+    # -y: the user confirmed twice; --no-reboot-check: our own restart
+    # question comes at the end.
+    if ! sudo fwupdmgr install -y --no-reboot-check "$BIOS_STAGE_DIR/$cab"; then
+        err "fwupd could not install the BIOS update (see above); the BIOS was not changed."
+        rm -rf "$BIOS_STAGE_DIR"
+        return 1
+    fi
+    rm -rf "$BIOS_STAGE_DIR"
+    BIOS_NEEDS_RESTART=1
+    ok "BIOS $newest is staged. It is written during the next restart:"
+    warn "keep the power on and don't touch the machine until it has fully started again."
+}
+
+bios_enable() {
+    local rc current compatible
+    current="$(bios_current)"
+    bios_prepare; rc=$?
+    [[ $rc -eq 2 ]] && return 0
+    [[ $rc -ne 0 ]] && return 1
+
+    local yes="$c_green$c_bold" b="$c_bold" n="$c_reset"
+    if [[ "$BIOS_COMPATIBLE" == dry-run ]]; then
+        compatible="${c_yellow}${b}not checked${n} (dry run)"
+    else
+        compatible="${yes}yes${n} (checked by fwupd)"
+    fi
     bios_disclaimer "WARNING: BIOS UPDATE - ENTIRELY AT YOUR OWN RISK" \
         "Current BIOS: ${b}$current${n}" \
         "New BIOS:     ${b}$BIOS_NEWEST${n}" \
         "Checksum:     ${yes}OK${n} (Valve's package)" \
         "Compatible:   $compatible"
     if ! ask_yn "Do you understand the risks and want to continue?" n; then
-        info "BIOS update cancelled; nothing was changed."; rm -rf "$tmp"; return 0
+        info "BIOS update cancelled; nothing was changed."; rm -rf "$BIOS_STAGE_DIR"; return 0
     fi
     bios_disclaimer "LAST CHANCE: THIS FLASHES BIOS $BIOS_NEWEST" \
         "After this, keep the power on until the machine has fully" \
@@ -176,28 +224,10 @@ bios_enable() {
     local reply
     read -rp "$(echo -e "${c_red}${c_bold}Type UPDATE (in capitals) to flash the BIOS, anything else cancels:${c_reset} ")" reply
     if [[ "$reply" != UPDATE ]]; then
-        info "BIOS update cancelled; nothing was changed."; rm -rf "$tmp"; return 0
+        info "BIOS update cancelled; nothing was changed."; rm -rf "$BIOS_STAGE_DIR"; return 0
     fi
-
-    if [[ -n "$BIOS_DRY_RUN" ]]; then
-        ok "Dry run: would run: fwupdmgr install -y --no-reboot-check $(basename "$BIOS_CAB")"
-        ok "Dry run finished; nothing was flashed."
-        # Treated as staged, so the restart choices that follow a real
-        # update show up too; restarting only prints (see restart_now).
-        BIOS_NEEDS_RESTART=1
-        rm -rf "$tmp"
-        return 0
-    fi
-    info "Handing BIOS $BIOS_NEWEST to fwupd. Do NOT turn off the power from now on."
-    # -y: we already asked twice; --no-reboot-check: the wizard's own
-    # restart question comes at the end.
-    if ! sudo fwupdmgr install -y --no-reboot-check "$tmp/$BIOS_CAB"; then
-        err "fwupd could not install the BIOS update (see above); the BIOS was not changed."
-        rm -rf "$tmp"
-        return 1
-    fi
-    rm -rf "$tmp"
-    BIOS_NEEDS_RESTART=1
-    ok "BIOS $BIOS_NEWEST is staged. It is written during the next restart:"
-    warn "keep the power on and don't touch the machine until it has fully started again."
+    bios_flash
 }
+
+# For the app (lib/backend.sh): the flash step alone, after its warnings.
+bios_flash_only() { bios_flash; }

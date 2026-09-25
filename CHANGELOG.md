@@ -5,6 +5,26 @@ All notable changes, per version and per commit. Versions follow
 `steamify.sh`. Versions before 0.7.0 were numbered afterwards,
 one per merged pull request.
 
+## 2.0.0 - 2026-09-25
+
+- **feat: Steamify app (v2 UI)**
+  - A graphical app for controller, keyboard and TV remote, driving the same
+    components through `steamify.sh --backend`; the BIOS update with both
+    warnings; built by GitHub and run with curl.
+- **feat(ui): HDMI refresh boost in the app**
+  - "Set up…" opens its own screen: the display, its resolution and the
+    rates on offer (its own mode, calculated tens, the HDMI 2.0 limit). The
+    display's own faster mode is switched to right away; every other rate
+    has a Try button (switch live, wait for the picture, then keep it within
+    15 s or it switches back) and a tick box. Install installs the ticked
+    rates. All rates are loaded when the screen opens, so a try is only a
+    mode switch.
+  - Unticking Steam Machine support or the kernel pin unticks it, as in the
+    menu.
+- **fix(ui): The details panel scrolls instead of overflowing**
+- **fix: Switching back to a rate like 59.97 Hz**
+  - `hdmi_set_mode` compared it as a whole number and printed an error.
+
 ## 1.2.0 - 2026-09-25
 
 - **feat: HDMI refresh boost (Steam Machine, pinned kernel)**
