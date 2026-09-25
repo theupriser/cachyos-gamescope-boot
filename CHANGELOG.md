@@ -7,7 +7,8 @@ one per merged pull request.
 
 ## 1.1.0 - 2026-09-25
 
-- **feat: HDMI-CEC** (experimental, never ticked by default, on every PC)
+- **feat: HDMI-CEC** (experimental, on every PC; ticked by default only on a
+  Steam Machine)
   - Valve's `cecd`, `cec-audio-control` and `inputattach-cec-units` from its
     SteamOS repository (SHA-256 checked): use Steam with the TV remote, and
     the TV turns on and off with the PC. On a Steam Machine, steamos-manager

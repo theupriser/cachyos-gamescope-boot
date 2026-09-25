@@ -13,7 +13,8 @@ ACTIONS=(bios)
 declare -A PARENT=([boot]=gaming [kpin]=machine)
 # Never preselected on a first run: booting into the desktop is a choice,
 # gamescope is the default; HDMI-CEC is opt-in (it can wake the machine or
-# upset other devices on the TV, even on SteamOS).
+# upset other devices on the TV, even on SteamOS), except on a Steam Machine,
+# which has CEC like on SteamOS.
 NO_PRESELECT=(boot cec)
 
 declare -A LABEL=(
@@ -74,6 +75,7 @@ detect_components() {
             component_available "$c" && ! is_action "$c" &&
                 [[ " ${NO_PRESELECT[*]} " != *" $c "* ]] && WANTED[$c]=1
         done
+        machine_available && WANTED[cec]=1
     fi
 }
 

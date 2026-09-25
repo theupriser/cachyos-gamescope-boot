@@ -27,14 +27,16 @@ Steam Machine.
    ([details](TECHNICAL.md#single-user-mode-sddm-no-locking)).
 5. **Steamify shortcut** - an icon on the desktop and in the launcher that
    opens the newest Steamify, so you don't need the install command again.
-6. **HDMI-CEC** (experimental, off by default) - use Steam with your TV's
+6. **HDMI-CEC** (experimental; off by default, on by default on a Steam
+   Machine) - use Steam with your TV's
    remote, and the TV turns on and off with the PC. Needs a GPU with CEC (like
    the Steam Machine) or a USB CEC adapter
    ([details](TECHNICAL.md#hdmi-cec)).
 
 ## Steam Machine
 
-On a Valve Steam Machine the menu has two more items:
+On a Valve Steam Machine **HDMI-CEC** is ticked by default, as on SteamOS,
+and the menu has two more items:
 
 - **Steam Machine support** - the front **LED bar** works, Steam's
   **hardware settings** (fan, performance) work, and the power

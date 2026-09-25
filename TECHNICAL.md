@@ -171,7 +171,8 @@ missing `-headers` package, which makes DKMS build the driver for it.
 
 ## HDMI-CEC
 
-The **HDMI-CEC** item (on every PC, never ticked by default) installs
+The **HDMI-CEC** item (on every PC; ticked by default only on a Steam
+Machine) installs
 Valve's CEC stack from its SteamOS `holo` repository, the newest `holo-X.Y`
 on `steamdeck-packages.steamos.cloud`, each package checked against the
 SHA-256 in Valve's package index:
