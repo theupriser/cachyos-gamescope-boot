@@ -71,6 +71,9 @@ ApplicationWindow {
         kpin: { label: "Pin the kernel", hint: "Fixes rebooting after shutdown",
                 body: "Newer CachyOS kernels make the Steam Machine reboot instead of shutting down. Untick once CachyOS fixes that.",
                 changes: ["linux-cachyos from Steamify's release (signature checked)", "Kept in /var/cache/steamify/kernel", "Added to IgnorePkg"] },
+        hdmi: { label: "HDMI refresh boost", hint: "Higher refresh over HDMI · turn on from Steamify in Konsole",
+                body: "The pinned kernel keeps many HDMI displays at 60 Hz. This finds the highest refresh rate your display runs at the desktop resolution. Each step needs you to confirm the picture, so it's turned on from the Steamify menu in Konsole; here you can only turn it off.",
+                changes: ["The display's EDID with the confirmed rates", "In the initramfs, drm.edid_firmware on the kernel command line", "Off: the display uses its own EDID again"] },
         bios: { label: "Update BIOS", hint: "",
                 body: "Installs Valve's newest Steam Machine BIOS, at your own risk. It checks Valve's checksum and asks fwupd whether the file fits this machine, then warns you twice before anything is written.",
                 changes: ["Valve's fremont-hw-support package (checksum checked)", "fwupd writes the BIOS during the next restart", "Keep the power on until the machine has fully started again"] }
@@ -132,8 +135,13 @@ ApplicationWindow {
         w[id] = !w[id];
         if (id === "gaming" && !w.gaming) { w.single = false; }
         if (id === "single" && w.single) w.gaming = true;
+        // HDMI refresh boost needs someone at the keyboard to confirm each
+        // step: it's only turned on from the terminal menu.
+        if (id === "hdmi" && w.hdmi && !nowOn("hdmi")) return;
         if (id === "machine") w.kpin = w.machine;
         if (id === "kpin" && w.kpin) w.machine = true;
+        if (id === "hdmi" && w.hdmi) { w.machine = true; w.kpin = true; }
+        if (!w.machine || !w.kpin) w.hdmi = false;
         want = w;
     }
     function computePlan() {

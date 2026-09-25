@@ -19,6 +19,8 @@ one per merged pull request.
   - Both are sub-options now, shown only while Steam Machine support is
     ticked. Unticking it unticks them; unticking the kernel pin unticks the
     HDMI refresh boost.
+  - In the app, HDMI refresh boost can only be turned off: each step needs
+    someone at the keyboard, so it's turned on from the menu in Konsole.
 
 ## 1.1.4 - 2026-09-25
 
