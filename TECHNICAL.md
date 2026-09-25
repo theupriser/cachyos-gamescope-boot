@@ -192,6 +192,13 @@ devices found. Also turn on CEC on the TV
 `steamos-manager` writes cecd's settings from Steam's (wake the TV, put it to
 sleep), in `~/.config/cecd/config.d/`, and Steam shows its HDMI-CEC
 settings; the wizard restarts steamos-manager so that happens right away.
+CachyOS's gaming mode script (`/usr/lib/steamos/gamescope-session`) sets
+`STEAM_ENABLE_CEC=0`, which hides those settings; Steam reads the script's
+variables from `$XDG_RUNTIME_DIR/gamescope-environment`. HDMI-CEC adds a
+drop-in for `steam-launcher.service`
+(`/etc/systemd/user/steam-launcher.service.d/10-steamify-cec.conf`) with a
+second `EnvironmentFile=` (`/etc/steamify/steam-cec.env`,
+`STEAM_ENABLE_CEC=1`), which overrides it from the next gaming mode start.
 
 It's experimental: on SteamOS itself CEC can wake the Steam Machine right
 after it goes to sleep (Samsung TVs,

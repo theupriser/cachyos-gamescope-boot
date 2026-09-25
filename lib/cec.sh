@@ -11,6 +11,11 @@ CEC_PKGS=(cecd cec-audio-control inputattach-cec-units)
 # steamos-manager checks once, at its start, whether cecd runs; order it
 # after cecd so it never misses it at login.
 CEC_ORDER_DROPIN=/etc/systemd/user/steamos-manager.service.d/10-steamify-after-cecd.conf
+# CachyOS's gaming mode script exports STEAM_ENABLE_CEC=0, which hides
+# Steam's HDMI-CEC settings; Steam reads it from the gamescope environment
+# file. A later EnvironmentFile= overrides it.
+CEC_STEAM_ENV=/etc/steamify/steam-cec.env
+CEC_STEAM_DROPIN=/etc/systemd/user/steam-launcher.service.d/10-steamify-cec.conf
 
 cec_link_steamos_manager() {
     # On a Steam Machine: steamos-manager writes cecd's config from Steam's
@@ -27,7 +32,11 @@ cec_link_steamos_manager() {
     return 0
 }
 
-cec_status() { pacman -Q "${CEC_PKGS[@]}" >/dev/null 2>&1; }
+cec_installed() { pacman -Q "${CEC_PKGS[@]}" >/dev/null 2>&1; }
+# On = installed and Steam told to show its CEC settings. An install from
+# before 1.1.3 lacks the latter; the menu then ticks it (see cec_repair).
+cec_status() { cec_installed && [[ -f "$CEC_STEAM_DROPIN" ]]; }
+cec_repair() { cec_installed && ! cec_status; }
 
 fetch_holo_pkg() {
     # fetch_holo_pkg <dir> <package>: download the newest <package> from
@@ -77,11 +86,17 @@ cec_enable() {
     sudo mkdir -p "$(dirname "$CEC_ORDER_DROPIN")"
     printf '%s\n' "# Written by Steamify: steamos-manager only sees cecd if it runs at its start." \
         '[Unit]' 'After=cecd.service' | sudo tee "$CEC_ORDER_DROPIN" >/dev/null
+    sudo mkdir -p "$(dirname "$CEC_STEAM_ENV")" "$(dirname "$CEC_STEAM_DROPIN")"
+    printf '%s\n' "# Written by Steamify: Steam's HDMI-CEC settings in gaming mode." 'STEAM_ENABLE_CEC=1' |
+        sudo tee "$CEC_STEAM_ENV" >/dev/null
+    printf '%s\n' "# Written by Steamify: overrides STEAM_ENABLE_CEC=0 from the gaming mode script." \
+        '[Service]' "EnvironmentFile=-$CEC_STEAM_ENV" | sudo tee "$CEC_STEAM_DROPIN" >/dev/null
     systemctl --user daemon-reload
     cec_link_steamos_manager
     if compgen -G "/dev/cec*" >/dev/null; then
         systemctl --user restart cecd.service 2>/dev/null
-        ok "HDMI-CEC on ($(cd /dev && echo cec*)). Turn on CEC on your TV too (e.g. Sony: BRAVIA Sync, Samsung: Anynet+, LG: SimpLink)."
+        ok "HDMI-CEC on ($(cd /dev && echo cec*)); Steam shows its settings from the next gaming mode start."
+        info "Turn on CEC on your TV too (e.g. Sony: BRAVIA Sync, Samsung: Anynet+, LG: SimpLink)."
     else
         warn "No CEC device (/dev/cec*) found: your GPU may not support CEC. A USB CEC adapter"
         warn "(e.g. Pulse-Eight) works too. Check again after a restart with: ls /dev/cec*"
@@ -93,8 +108,8 @@ cec_disable() {
     systemctl --user disable --now cecd.service cec-audio-control.socket cec-audio-control.service 2>/dev/null
     systemctl --user disable steamos-manager-configure-cecd.service 2>/dev/null
     sudo pacman -Rns --noconfirm "${CEC_PKGS[@]}" 2>/dev/null
-    sudo rm -f "$CEC_ORDER_DROPIN"
-    sudo rmdir "$(dirname "$CEC_ORDER_DROPIN")" 2>/dev/null
+    sudo rm -f "$CEC_ORDER_DROPIN" "$CEC_STEAM_DROPIN" "$CEC_STEAM_ENV"
+    sudo rmdir "$(dirname "$CEC_ORDER_DROPIN")" "$(dirname "$CEC_STEAM_DROPIN")" "$(dirname "$CEC_STEAM_ENV")" 2>/dev/null
     systemctl --user daemon-reload
     if [[ -n "$(state_get cec installed_linuxconsole)" ]]; then
         sudo pacman -Rns --noconfirm linuxconsole 2>/dev/null

@@ -5,6 +5,16 @@ All notable changes, per version and per commit. Versions follow
 `steamify.sh`. Versions before 0.7.0 were numbered afterwards,
 one per merged pull request.
 
+## 1.1.3 - 2026-09-25
+
+- **fix: HDMI-CEC settings shown in Steam**
+  - CachyOS's gaming mode script sets `STEAM_ENABLE_CEC=0`, which hides
+    Steam's HDMI-CEC settings (and its CEC volume buttons). HDMI-CEC now adds
+    a drop-in for `steam-launcher.service` that overrides it with
+    `STEAM_ENABLE_CEC=1` (`/etc/steamify/steam-cec.env`).
+  - HDMI-CEC set up by 1.1.0-1.1.2 shows as off and ticked, so a normal run
+    (Enter) adds this.
+
 ## 1.1.2 - 2026-09-25
 
 - **fix: Steam's HDMI-CEC settings reach cecd on a first run**

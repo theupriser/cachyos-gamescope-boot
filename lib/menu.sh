@@ -67,6 +67,8 @@ detect_components() {
         if "${c}_status"; then CURRENT[$c]=1; any=true; else CURRENT[$c]=0; fi
         WANTED[$c]=${CURRENT[$c]}
     done
+    # HDMI-CEC set up by an older version: tick it, so a normal run fixes it.
+    component_available cec && cec_repair && WANTED[cec]=1
     # Shows the current and newest BIOS version.
     bios_available && { bios_lookup_newest; LABEL[bios]="$(bios_label)"; }
     # First run: preselect the full SteamOS experience (never an action).
