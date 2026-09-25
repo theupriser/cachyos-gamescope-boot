@@ -247,12 +247,20 @@ class Backend(QObject):
 
     @Slot("QVariant", str, bool, str)
     def apply(self, ids, boot, reapply, password):
-        args = ["apply"]
-        if reapply:
-            args.append("--reapply")
-        if boot:
-            args += ["--boot", boot]
-        self._start(args + list(ids), password)
+        try:
+            if hasattr(ids, "toVariant"):  # a JS array from QML
+                ids = ids.toVariant()
+            args = ["apply"]
+            if reapply:
+                args.append("--reapply")
+            if boot:
+                args += ["--boot", boot]
+            self._start(args + [str(i) for i in (ids or [])], password)
+        except Exception as e:
+            # Never leave the app on the progress screen.
+            print("steamify-ui: couldn't start:", e, file=sys.stderr)
+            self._drop_askpass()
+            self.event.emit({"event": "finished", "failed": [], "restart": False, "error": "start"})
 
     @Slot(str)
     def biosPrepare(self, password):

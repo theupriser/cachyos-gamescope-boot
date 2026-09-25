@@ -225,7 +225,7 @@ ApplicationWindow {
             else if (ev.event === "finished") {
                 if (!(biosRun && plan.length && plan[0].action === "check" && !ev.failed.length && !ev.error && !ev.nothing)) sessionPassword = "";
                 failed = ev.failed || []; restartNeeded = !!ev.restart;
-                runError = ev.error === "wrong-password" ? "The password didn't work." : (ev.error ? "sudo isn't available." : "");
+                runError = ev.error === "wrong-password" ? "The password didn't work." : (ev.error === "start" ? "Steamify couldn't start the changes." : (ev.error ? "sudo isn't available." : ""));
                 screen = "done";
             }
         }
