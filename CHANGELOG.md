@@ -5,6 +5,14 @@ All notable changes, per version and per commit. Versions follow
 `steamify.sh`. Versions before 0.7.0 were numbered afterwards,
 one per merged pull request.
 
+## 1.1.2 - 2026-09-25
+
+- **fix: Steam's HDMI-CEC settings reach cecd on a first run**
+  - HDMI-CEC runs before Steam Machine support, which installs
+    steamos-manager; so steamos-manager's `configure-cecd` unit couldn't be
+    enabled and cecd ran without Steam's settings. Steam Machine support now
+    links them once steamos-manager is there.
+
 ## 1.1.1 - 2026-09-25
 
 - **perf: Pinned kernel before the LED driver**

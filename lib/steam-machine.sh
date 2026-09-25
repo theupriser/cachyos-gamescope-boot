@@ -395,6 +395,8 @@ EOF
     sudo systemctl enable --now inputplumber.service
     sudo systemctl enable --now steamos-manager.service
     systemctl --user enable steamos-manager.service 2>/dev/null
+    # HDMI-CEC ran before this and couldn't link cecd to steamos-manager yet.
+    cec_status && cec_link_steamos_manager
 
     # Console-like power handling, as SteamOS's powerdevilrc (mains-power
     # part; there is no battery): the power button sleeps instead of showing
