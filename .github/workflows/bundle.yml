@@ -8,12 +8,15 @@
 # Each release also has the app (v2): steamify-app.tar.gz (ui/, steamify.sh,
 # lib/, the icon) and its launcher, run with:
 #   curl -fsSL https://github.com/theupriser/steamify-cachyos/releases/latest/download/steamify-app.sh | bash
+# A push to feat/v2-ui (the app, not released yet) updates the pre-release
+# v2-ui-preview instead, whose launcher gets that build:
+#   curl -fsSL https://github.com/theupriser/steamify-cachyos/releases/download/v2-ui-preview/steamify-app.sh | bash
 # Pull requests only build and check it, and warn when VERSION is already released.
 name: Single-file build
 
 on:
   push:
-    branches: [main]
+    branches: [main, feat/v2-ui]
   pull_request:
   workflow_dispatch:
 
@@ -103,3 +106,23 @@ jobs:
             gh release create latest --title "Steamify CachyOS - latest (v$VERSION)" --notes "$latest_notes" --latest=false
           fi
           gh release upload latest dist/steamify.sh dist/steamify-app.sh dist/steamify-app.tar.gz assets/steam-gaming-settings.svg --clobber
+
+      - name: Publish the v2-ui-preview pre-release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/feat/v2-ui'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Its launcher downloads this pre-release, not the newest release.
+          sed -i 's/STEAMIFY_RELEASE:-latest/STEAMIFY_RELEASE:-v2-ui-preview/' dist/steamify-app.sh
+          grep -q 'STEAMIFY_RELEASE:-v2-ui-preview' dist/steamify-app.sh
+          git tag -f v2-ui-preview "$GITHUB_SHA" && git push -f origin v2-ui-preview
+          notes="Preview of the Steamify app (v2) from feat/v2-ui ($(git describe --always), $(git log -1 --format='%cs %s')). Not a release.
+          Run it with:
+
+              curl -fsSL https://github.com/${{ github.repository }}/releases/download/v2-ui-preview/steamify-app.sh | bash"
+          if gh release view v2-ui-preview >/dev/null 2>&1; then
+            gh release edit v2-ui-preview --title "Steamify app (v2) preview" --notes "$notes" --prerelease --latest=false
+          else
+            gh release create v2-ui-preview --target "$GITHUB_SHA" --title "Steamify app (v2) preview" --notes "$notes" --prerelease --latest=false
+          fi
+          gh release upload v2-ui-preview dist/steamify-app.sh dist/steamify-app.tar.gz --clobber

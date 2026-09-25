@@ -4,11 +4,13 @@
 # Downloads the newest release's app package (steamify-app.tar.gz: the app,
 # steamify.sh and lib/) to ~/.local/share/steamify/app, installs PySide6 if
 # it's missing, adds a launcher entry, and starts the app.
-# STEAMIFY_BRANCH=<branch> takes that branch's source instead of a release
-# (for testing before a release).
+# STEAMIFY_RELEASE=<tag> takes that release instead of the newest (the
+# v2-ui-preview build's copy of this script sets it). STEAMIFY_BRANCH=<branch>
+# takes that branch's source instead (for testing before a build).
 set -euo pipefail
 
 REPO="theupriser/steamify-cachyos"
+RELEASE="${STEAMIFY_RELEASE:-latest}"
 DEST="${XDG_DATA_HOME:-$HOME/.local/share}/steamify/app"
 APPS="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 
@@ -26,8 +28,14 @@ if [[ -n "${STEAMIFY_BRANCH:-}" ]]; then
     mkdir "$tmp/app"
     tar -xzf "$tmp/src.tar.gz" -C "$tmp/app" --strip-components=1
 else
-    say "Downloading the newest Steamify app..."
-    curl -fsSL "https://github.com/$REPO/releases/latest/download/steamify-app.tar.gz" -o "$tmp/app.tar.gz" ||
+    if [[ "$RELEASE" == latest ]]; then
+        url="https://github.com/$REPO/releases/latest/download/steamify-app.tar.gz"
+        say "Downloading the newest Steamify app..."
+    else
+        url="https://github.com/$REPO/releases/download/$RELEASE/steamify-app.tar.gz"
+        say "Downloading the Steamify app ($RELEASE)..."
+    fi
+    curl -fsSL "$url" -o "$tmp/app.tar.gz" ||
         die "Couldn't download the app (is there a release with steamify-app.tar.gz yet?)."
     mkdir "$tmp/app"
     tar -xzf "$tmp/app.tar.gz" -C "$tmp/app"

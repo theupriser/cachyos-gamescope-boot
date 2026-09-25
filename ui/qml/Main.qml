@@ -118,6 +118,7 @@ ApplicationWindow {
     }
     function label(it) { return (texts[it.id] && texts[it.id].label) || it.label; }
     function syncFromStatus() {
+        reapply = false;
         var w = {};
         for (var i = 0; i < items.length; i++) w[items[i].id] = items[i].kind === "action" ? false : items[i].wanted;
         want = w;
@@ -252,7 +253,7 @@ ApplicationWindow {
             else if (a === "back") Qt.quit();
         } else if (screen === "review") {
             if (a === "accept" || a === "apply") onApplyPressed();
-            else if (a === "back") screen = "menu";
+            else if (a === "back") { reapply = false; screen = "menu"; }
         } else if (screen === "password") {
             if (a === "accept" || a === "apply") submitPassword();
             else if (a === "back") { pw.text = ""; screen = "review"; }
@@ -353,9 +354,13 @@ ApplicationWindow {
     // --- The 1280x720 stage, scaled to the window ---
     Item {
         id: stage
-        width: 1280; height: 720
-        anchors.centerIn: parent
-        scale: Math.min(win.width / 1280, win.height / 720)
+        // Scaled like a 1280x720 screen, but stretched to the window's own
+        // shape, so the bars reach the edges and the content fills it.
+        readonly property real k: Math.min(win.width / 1280, win.height / 720)
+        width: win.width / k; height: win.height / k
+        x: 0; y: 0
+        transformOrigin: Item.TopLeft
+        scale: k
         focus: true
         Keys.onPressed: function (e) { if (!(screen === "password" && pw.activeFocus && e.key !== Qt.Key_Escape && e.key !== Qt.Key_Return && e.key !== Qt.Key_Enter)) keyAct(e); }
         Keys.onReleased: function (e) { if (screen === "bios2" && !e.isAutoRepeat && (e.key === Qt.Key_Return || e.key === Qt.Key_Enter)) act("release"); }
@@ -393,7 +398,7 @@ ApplicationWindow {
 
             Item {
                 id: menuBody; visible: items.length > 0
-                x: 40; y: 28; width: 1200; height: parent.height - 28 - 64 - 20
+                x: 40; y: 28; width: parent.width - 80; height: parent.height - 28 - 64 - 20
                 // Left: the list
                 Column {
                     id: listCol; width: 740; height: parent.height; spacing: 10
@@ -564,7 +569,7 @@ ApplicationWindow {
                     Text { anchors.verticalCenter: parent.verticalCenter; x: 18; text: "Your password is asked once. Changes to how the PC starts need a restart."; color: t.soft; font.family: t.body; font.pixelSize: 14 } }
             }
             Rectangle {
-                x: 812; y: 32; width: 428; height: 210; radius: 16; color: t.card
+                x: parent.width - 468; y: 32; width: 428; height: 210; radius: 16; color: t.card
                 Column { anchors.fill: parent; anchors.margins: 24; spacing: 12
                     Text { text: "SUMMARY"; color: t.faint; font.family: t.body; font.pixelSize: 12; font.weight: Font.DemiBold; font.letterSpacing: 0.8 }
                     Repeater { model: [["Turn on", "on"], ["Re-apply", "again"], ["Turn off", "off"]]
@@ -576,7 +581,7 @@ ApplicationWindow {
             Rectangle {
                 anchors.bottom: parent.bottom; width: parent.width; height: 64; color: t.bar
                 Rectangle { width: parent.width; height: 1; color: t.line }
-                Btn { anchors.left: parent.left; anchors.leftMargin: 40; anchors.verticalCenter: parent.verticalCenter; k: g.back; text: "Back to the menu"; onClicked: screen = "menu" }
+                Btn { anchors.left: parent.left; anchors.leftMargin: 40; anchors.verticalCenter: parent.verticalCenter; k: g.back; text: "Back to the menu"; onClicked: act("back") }
                 Btn { anchors.right: parent.right; anchors.rightMargin: 40; anchors.verticalCenter: parent.verticalCenter; k: g.ok; text: "Apply"; primary: true; visible: plan.length > 0; onClicked: onApplyPressed() }
             }
         }
@@ -660,7 +665,7 @@ ApplicationWindow {
                 }
             }
             Column {
-                x: 632; y: 32; width: 608; height: parent.height - 64; spacing: 10
+                x: 632; y: 32; width: parent.width - 672; height: parent.height - 64; spacing: 10
                 Text { text: "DETAILS"; color: t.faint; font.family: t.body; font.pixelSize: 12; font.weight: Font.DemiBold; font.letterSpacing: 0.8 }
                 Rectangle { width: parent.width; height: parent.height - 30; radius: 16; color: "#0b0e13"; border.width: 1; border.color: "#1d2531"
                     ListView { id: logView; anchors.fill: parent; anchors.margins: 18; clip: true; model: logModel
@@ -674,7 +679,7 @@ ApplicationWindow {
             visible: screen === "bios1"
             anchors.top: header.bottom; anchors.bottom: parent.bottom; width: parent.width
             Rectangle {
-                x: 40; y: 28; width: 1200; height: parent.height - 28 - 64 - 24; radius: 16; color: "#1d1416"; border.width: 2; border.color: "#b33a3a"
+                x: 40; y: 28; width: parent.width - 80; height: parent.height - 28 - 64 - 24; radius: 16; color: "#1d1416"; border.width: 2; border.color: "#b33a3a"
                 Row { anchors.fill: parent; anchors.margins: 32; spacing: 40
                     Column { width: 640; spacing: 16
                         Row { spacing: 12
