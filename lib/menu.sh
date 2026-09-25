@@ -10,7 +10,7 @@ COMPONENTS=(gaming boot theme glyphs single launcher cec machine kpin hdmi bios)
 # re-applied, not listed as on or off.
 ACTIONS=(bios)
 # Sub-options, shown indented under their parent and only while it's ticked.
-declare -A PARENT=([boot]=gaming [kpin]=machine)
+declare -A PARENT=([boot]=gaming [kpin]=machine [hdmi]=machine [bios]=machine)
 # Never preselected on a first run: booting into the desktop is a choice,
 # gamescope is the default; HDMI-CEC is opt-in (it can wake the machine or
 # upset other devices on the TV, even on SteamOS), except on a Steam Machine,
@@ -96,6 +96,12 @@ toggle_component() {
     # The kernel pin is opt-out: ticked along with Steam Machine support.
     if [[ "$c" == machine ]]; then WANTED[kpin]=${WANTED[machine]}; fi
     if [[ "$c" == kpin && "${WANTED[kpin]}" == 1 ]]; then WANTED[machine]=1; fi
+    # HDMI refresh boost and the BIOS update sit under Steam Machine support;
+    # the boost also needs the pinned kernel (newer kernels don't need it).
+    if [[ "$c" == machine && "${WANTED[machine]}" == 0 ]]; then WANTED[hdmi]=0; WANTED[bios]=0; fi
+    if [[ "$c" == kpin && "${WANTED[kpin]}" == 0 ]]; then WANTED[hdmi]=0; fi
+    if [[ "$c" == hdmi && "${WANTED[hdmi]}" == 1 ]]; then WANTED[machine]=1; WANTED[kpin]=1; fi
+    if [[ "$c" == bios && "${WANTED[bios]}" == 1 ]]; then WANTED[machine]=1; fi
 }
 
 show_menu() {
@@ -118,12 +124,13 @@ show_menu() {
             [[ "${CURRENT[gaming]}" == 1 ]] || now="-"
             want="gaming"; [[ "${WANTED[boot]}" == 1 ]] && want="desk"
             printf "  %-3s %-6s %-6s   └ %s\n" "$i" "$now" "$want" "$(boot_choice "${WANTED[boot]}")"
+        elif ! component_selectable "$c"; then
+            local tree=""; [[ -n "${PARENT[$c]:-}" ]] && tree="  └ "
+            printf "  %b%-3s %-6s %-6s %s%s (not available)%b\n" "$c_dim" "$i" "$now" "$want" "$tree" "${LABEL[$c]}" "$c_reset"
         elif [[ -n "${PARENT[$c]:-}" ]]; then
             printf "  %-3s %b %-6s   └ %s\n" "$i" "$now" "$want" "${LABEL[$c]}"
-        elif component_selectable "$c"; then
-            printf "  %-3s %b %-6s %s\n" "$i" "$now" "$want" "${LABEL[$c]}"
         else
-            printf "  %b%-3s %-6s %-6s %s (not available)%b\n" "$c_dim" "$i" "$now" "$want" "${LABEL[$c]}" "$c_reset"
+            printf "  %-3s %b %-6s %s\n" "$i" "$now" "$want" "${LABEL[$c]}"
         fi
     done
     echo
@@ -171,8 +178,9 @@ draw_menu_tui() {
         fi
         if ! component_selectable "$c"; then
             # Greyed out: nothing to do (e.g. BIOS already up to date).
-            local mark="   "; (( i == cursor )) && mark=" ${c_cyan}>${c_reset} "
-            echo -e "${mark}${c_dim}[ ] ${LABEL[$c]}  (not available)${c_reset}"
+            local mark="   " tree=""; (( i == cursor )) && mark=" ${c_cyan}>${c_reset} "
+            [[ -n "${PARENT[$c]:-}" ]] && tree="    └ "
+            echo -e "${mark}${c_dim}${tree}[ ] ${LABEL[$c]}  (not available)${c_reset}"
         elif (( i == cursor )); then
             # The green x's reset would end the bold too: re-enable it after.
             echo -e " ${c_cyan}>${c_reset} ${c_bold}${line//"$c_reset"/"$c_reset$c_bold"}${c_reset}${state}"
