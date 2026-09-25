@@ -245,8 +245,8 @@ class Backend(QObject):
         self.busyChanged.emit()
         p.start()
 
-    @Slot("QVariant", str, bool, str)
-    def apply(self, ids, boot, reapply, password):
+    @Slot("QVariant", str, bool, str, str)
+    def apply(self, ids, boot, reapply, password, hdmi):
         try:
             if hasattr(ids, "toVariant"):  # a JS array from QML
                 ids = ids.toVariant()
@@ -255,6 +255,8 @@ class Backend(QObject):
                 args.append("--reapply")
             if boot:
                 args += ["--boot", boot]
+            if hdmi:  # rates confirmed on the HDMI screen
+                args += ["--hdmi", hdmi]
             self._start(args + [str(i) for i in (ids or [])], password)
         except Exception as e:
             # Never leave the app on the progress screen.
@@ -271,6 +273,21 @@ class Backend(QObject):
     def biosFlash(self, password):
         """Only after both warnings in the app."""
         self._start(["bios-flash"], password)
+
+    @Slot(str)
+    def hdmiOptions(self, password):
+        """Reads the HDMI displays: ends with an hdmi-options event."""
+        self._start(["hdmi-options"], password)
+
+    @Slot(str, str, int, int, float, str)
+    def hdmiTry(self, password, conn, w, h, hz, rates):
+        """Switches to hz live: an hdmi-tried event says whether it worked."""
+        self._start(["hdmi-try", conn, str(w), str(h), "%g" % hz] + [r for r in rates.split(",") if r], password)
+
+    @Slot(str, str, int, int, float)
+    def hdmiReset(self, password, conn, w, h, hz):
+        """The display's own EDID and the old rate again (hdmi-reset event)."""
+        self._start(["hdmi-reset", conn, str(w), str(h), "%g" % hz], password)
 
     def _read(self, p):
         self._buf += bytes(p.readAllStandardOutput())

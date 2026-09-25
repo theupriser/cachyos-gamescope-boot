@@ -19,6 +19,9 @@ HDMI_INITRAMFS_CONF=/etc/mkinitcpio.conf.d/90-steamify-edid.conf
 HDMI_CONFIRM_SECONDS="${WIZARD_HDMI_CONFIRM_SECONDS:-15}"
 # amdgpu's HDMI 2.0 limit; the display's own limit (from its EDID) may be lower.
 HDMI_TMDS_MAX_KHZ=600000
+# Rates picked and tested in the app ("<output>=<w>x<h>:<rate>,..."), set by
+# the backend's apply --hdmi; empty in the terminal menu, which tests itself.
+HDMI_CHOICE=()
 
 hdmi_connectors() {
     # Connected HDMI outputs, as "<card>-<connector>" (e.g. card1-HDMI-A-1).
@@ -173,6 +176,36 @@ elif cmd == 'plan':
     steps = sorted({top // 10 * 10, top // 100 * 100})
     steps = [s for s in steps if s > best + 1 and not any(abs(s - x) < 1 for x in listed)]
     print(lim // 1000, round(best, 2), *steps)
+elif cmd == 'options':
+    # JSON for the app: the display's name, the HDMI limit and the rates to
+    # offer at w x h: its own modes the kernel skips ("monitor"), calculated
+    # tens up to the limit ("calculated", ticked) and the exact limit when
+    # that's no ten ("limit", not ticked).
+    import json
+    e, k = load(args[0]), load(args[1]); w, h, cur = int(args[2]), int(args[3]), float(args[4])
+    lim, t = tmds_khz(e), shortest(e, w, h)
+    name = ''
+    for o in range(54, 126, 18):
+        if e[o:o + 3] == b'\0\0\0' and e[o + 3] == 0xfc:
+            name = e[o + 5:o + 18].split(b'\n')[0].decode('ascii', 'replace').strip()
+    rates = []
+    if t:
+        fits = [x for x in timings(e) if x[2] == w and x[7] == h and x[1] <= lim]
+        known = [x[0] for x in timings(k) if x[2] == w and x[7] == h]
+        listed = [x[0] for x in fits]
+        best = max(listed + [cur])
+        for x in sorted(fits):
+            if x[0] > cur + 1 and not any(abs(x[0] - y) < 0.5 for y in known):
+                rates.append({'hz': round(x[0], 2), 'mhz': round(x[1] / 1000, 1), 'kind': 'monitor', 'pick': True})
+        size = (t[2] + t[3]) * (t[7] + t[8])
+        vmax = max_vrefresh(e) or int(max(listed + [cur]))
+        top = min(int(lim * 1000 // size), vmax)
+        tens = [r for r in range(10, top + 1, 10) if r > best + 1 and not any(abs(r - y) < 1 for y in listed)][-3:]
+        for r in tens:
+            rates.append({'hz': r, 'mhz': round(size * r / 1e6, 1), 'kind': 'calculated', 'pick': True})
+        if top % 10 and top > best + 1:
+            rates.append({'hz': top, 'mhz': round(size * top / 1e6, 1), 'kind': 'limit', 'pick': False})
+    print(json.dumps({'name': name, 'limit': lim // 1000, 'rates': rates}))
 elif cmd == 'build':
     e = load(args[0]); w, h = int(args[2]), int(args[3]); rates = [int(r) for r in args[4:]]
     t = shortest(e, w, h)
@@ -278,7 +311,8 @@ hdmi_set_mode() {
     kscreen-doctor "output.$1.mode.$id" >/dev/null 2>&1 || return 1
     sleep 2
     rate="$(hdmi_kscreen current "$1" | cut -d' ' -f3)"
-    [[ "${rate%.*}" -ge $(( $4 - 1 )) ]]
+    # Whole hertz: the rate asked for can be e.g. 59.97.
+    [[ "${rate%.*}" -ge $(( ${4%.*} - 1 )) ]]
 }
 
 hdmi_confirm() {
@@ -370,9 +404,89 @@ hdmi_tune() {
     HDMI_RESULT="$w $h ${ok_rates[*]}"
 }
 
+# --- For the app: options, live tries, and installing what was confirmed ---
+# The EDIDs read by hdmi_options, reused by the tries and the install.
+HDMI_CACHE="${XDG_RUNTIME_DIR:-/tmp}/steamify-hdmi"
+
+hdmi_options() {
+    # JSON array: per connected HDMI output its name, mode and rate options.
+    local conn out cur w h hz opts sep=""
+    mkdir -p "$HDMI_CACHE"
+    printf '['
+    for conn in $(hdmi_connectors); do
+        out="${conn#card*-}"
+        # A live EDID left by an earlier try would look like the display's own.
+        hdmi_status || hdmi_override_live "$conn" reset 2>/dev/null
+        cur="$(hdmi_kscreen current "$out")"
+        [[ -n "$cur" ]] || continue
+        read -r w h hz <<< "$cur"
+        hdmi_read_edid "$conn" "$HDMI_CACHE/$out.orig" || continue
+        opts="$(hdmi_edid_tool options "$HDMI_CACHE/$out.orig" "/sys/class/drm/$conn/edid" "$w" "$h" "$hz")" || continue
+        # Every rate on offer loaded now, while the list is on screen: a try
+        # is then only a mode switch (the current mode stays in the EDID).
+        hdmi_status || hdmi_preload "$conn" "$w" "$h" "$opts"
+        printf '%s{"connector":"%s","output":"%s","width":%s,"height":%s,"hz":%s,"info":%s}' "$sep" "$conn" "$out" "$w" "$h" "$hz" "$opts"
+        sep=","
+    done
+    printf ']'
+}
+
+hdmi_preload() {
+    # hdmi_preload <card-connector> <w> <h> <options json>: load the EDID
+    # with the calculated rates, as hdmi_try would on the first try.
+    local conn="$1" out="${1#card*-}"
+    local -a rates
+    read -ra rates <<< "$(python3 -c 'import json, sys
+print(" ".join(str(r["hz"]) for r in json.loads(sys.argv[1])["rates"] if r["kind"] != "monitor"))' "$4")"
+    hdmi_edid_tool build "$HDMI_CACHE/$out.orig" "$HDMI_CACHE/$out.test" "$2" "$3" "${rates[@]}" &&
+        hdmi_override_live "$conn" "$HDMI_CACHE/$out.test" &&
+        cp "$HDMI_CACHE/$out.test" "$HDMI_CACHE/$out.loaded"
+}
+
+hdmi_try() {
+    # hdmi_try <card-connector> <w> <h> <hz> [<rate>...]: switch to hz, with
+    # an EDID holding the given calculated rates (loaded once per set).
+    local conn="$1" w="$2" h="$3" hz="$4" out="${1#card*-}"
+    shift 4
+    [[ -f "$HDMI_CACHE/$out.orig" ]] || hdmi_read_edid "$conn" "$HDMI_CACHE/$out.orig"
+    hdmi_edid_tool build "$HDMI_CACHE/$out.orig" "$HDMI_CACHE/$out.test" "$w" "$h" "$@" || return 1
+    if ! cmp -s "$HDMI_CACHE/$out.test" "$HDMI_CACHE/$out.loaded" 2>/dev/null; then
+        hdmi_override_live "$conn" "$HDMI_CACHE/$out.test" || return 1
+        cp "$HDMI_CACHE/$out.test" "$HDMI_CACHE/$out.loaded"
+    fi
+    hdmi_set_mode "$out" "$w" "$h" "$hz"
+}
+
+hdmi_reset() {
+    # hdmi_reset <card-connector> <w> <h> <hz>: the display's own EDID again.
+    hdmi_override_live "$1" reset
+    rm -f "$HDMI_CACHE/${1#card*-}.loaded"
+    hdmi_set_mode "${1#card*-}" "$2" "$3" "$4" >/dev/null
+}
+
+hdmi_choose() {
+    # For HDMI_CHOICE ("<output>=<w>x<h>:<rate>,..." from the app, rates it
+    # confirmed): builds the final EDIDs in <tmpdir> like hdmi_tune does.
+    local tmp="$1" item out mode rates w h
+    local -a r
+    for item in "${HDMI_CHOICE[@]}"; do
+        out="${item%%=*}"; mode="${item#*=}"; rates="${mode#*:}"; mode="${mode%%:*}"
+        w="${mode%x*}"; h="${mode#*x}"
+        IFS=',' read -ra r <<< "$rates"
+        HDMI_CHOSEN_CONN="$(basename /sys/class/drm/card*-"$out")"
+        if [[ -f "$HDMI_CACHE/$out.orig" ]]; then cp "$HDMI_CACHE/$out.orig" "$tmp/$out.orig"
+        else hdmi_read_edid "$HDMI_CHOSEN_CONN" "$tmp/$out.orig" || return 1; fi
+        hdmi_edid_tool build "$tmp/$out.orig" "$tmp/$out.final" "$w" "$h" "${r[@]}" &&
+            hdmi_override_live "$HDMI_CHOSEN_CONN" "$tmp/$out.final" || return 1
+        [[ ${#r[@]} -gt 0 ]] && hdmi_set_mode "$out" "$w" "$h" "${r[-1]}" >/dev/null
+        HDMI_RESULTS+=("$out|$w $h ${r[*]}")
+    done
+}
+
 hdmi_enable() {
-    if [[ "${BACKEND:-false}" == true ]]; then
-        err "HDMI refresh boost needs you at the screen: run it from the Steamify menu in Konsole."
+    local -a HDMI_RESULTS=()
+    if [[ "${BACKEND:-false}" == true && ${#HDMI_CHOICE[@]} -eq 0 ]]; then
+        err "HDMI refresh boost needs you at the screen: pick and test the rates in the app first."
         return 1
     fi
     if [[ "${XDG_CURRENT_DESKTOP:-}" != *KDE* ]] || ! command -v kscreen-doctor >/dev/null; then
@@ -389,24 +503,31 @@ hdmi_enable() {
             ok "Already set up for the connected display(s). Untick and tick it again to re-test."
             return 0
         fi
-        warn "Set up for another display; testing the one connected now."
+        warn "Set up for another display; setting up the one connected now."
         hdmi_disable || return 1
     fi
     sudo pacman -S --needed --noconfirm i2c-tools python >/dev/null 2>&1 || { err "Installing i2c-tools failed."; return 1; }
 
-    local tmp conn out param="" files=() rc=0
+    local tmp conn out param="" files=() rc=0 res
     tmp="$(mktemp -d)"
-    for conn in $(hdmi_connectors); do
-        out="${conn#card*-}"
-        hdmi_tune "$conn" "$tmp" || { rc=1; continue; }
-        [[ -n "$HDMI_RESULT" ]] || continue
+    if [[ ${#HDMI_CHOICE[@]} -gt 0 ]]; then
+        # Picked and tested in the app.
+        hdmi_choose "$tmp" || rc=1
+    else
+        for conn in $(hdmi_connectors); do
+            hdmi_tune "$conn" "$tmp" || { rc=1; continue; }
+            [[ -n "$HDMI_RESULT" ]] && HDMI_RESULTS+=("${conn#card*-}|$HDMI_RESULT")
+        done
+    fi
+    for res in "${HDMI_RESULTS[@]}"; do
+        out="${res%%|*}"
         sudo install -Dm644 "$tmp/$out.final" "$HDMI_FW_DIR/steamify-$out.bin" || { rc=1; continue; }
         state_set hdmi "$out" "$(hdmi_edid_tool id "$tmp/$out.orig")"
-        state_set hdmi "$out-mode" "$HDMI_RESULT"
+        state_set hdmi "$out-mode" "${res#*|}"
         param+="${param:+,}$out:edid/steamify-$out.bin"
         files+=("$HDMI_FW_DIR/steamify-$out.bin")
     done
-    rm -rf "$tmp"
+    rm -rf "$tmp" "$HDMI_CACHE"
     [[ -n "$param" ]] || return $rc
 
     # amdgpu loads from the initramfs (the kms hook), before the root

@@ -71,9 +71,9 @@ ApplicationWindow {
         kpin: { label: "Pin the kernel", hint: "Fixes rebooting after shutdown",
                 body: "Newer CachyOS kernels make the Steam Machine reboot instead of shutting down. Untick once CachyOS fixes that.",
                 changes: ["linux-cachyos from Steamify's release (signature checked)", "Kept in /var/cache/steamify/kernel", "Added to IgnorePkg"] },
-        hdmi: { label: "HDMI refresh boost", hint: "Higher refresh over HDMI · turn on from Steamify in Konsole",
-                body: "The pinned kernel keeps many HDMI displays at 60 Hz. This finds the highest refresh rate your display runs at the desktop resolution. Each step needs you to confirm the picture, so it's turned on from the Steamify menu in Konsole; here you can only turn it off.",
-                changes: ["The display's EDID with the confirmed rates", "In the initramfs, drm.edid_firmware on the kernel command line", "Off: the display uses its own EDID again"] },
+        hdmi: { label: "HDMI refresh boost", hint: "Higher refresh rates over HDMI",
+                body: "The pinned kernel keeps many HDMI displays at 60 Hz. Turning this on shows which refresh rates your display can run at the desktop resolution; you pick them, and each one is tried for 15 seconds so you can check the picture before it's installed.",
+                changes: ["The display's EDID with the rates you confirmed", "In the initramfs, drm.edid_firmware on the kernel command line", "Off: the display uses its own EDID again"] },
         bios: { label: "Update BIOS", hint: "",
                 body: "Installs Valve's newest Steam Machine BIOS, at your own risk. It checks Valve's checksum and asks fwupd whether the file fits this machine, then warns you twice before anything is written.",
                 changes: ["Valve's fremont-hw-support package (checksum checked)", "fwupd writes the BIOS during the next restart", "Keep the power on until the machine has fully started again"] }
@@ -101,6 +101,85 @@ ApplicationWindow {
     property bool biosChecking: false        // the invisible check before the warnings
     property int biosFocus: 0                // warning 1: 0 = Cancel, 1 = continue
     property real holdProgress: 0            // warning 2: hold A/OK for 5 s
+    // HDMI refresh boost: try rates one by one, then install the kept ones.
+    property var hdmi: null                  // the first HDMI output from hdmi-options
+    property bool hdmiLoading: false
+    property var hdmiResult: ({})            // hz -> "ok" | "fail" (tried)
+    property var hdmiPick: ({})              // hz -> ticked for Install
+    property int hdmiSel: 0                  // rate row; rates.length = the Install button
+    property real hdmiHz: 0                  // the rate being tried (e.g. 99.98)
+    property real hdmiNow: 0                 // the rate on screen: the last one kept
+    property double hdmiBackAt: 0            // when a test returned to the list
+    property string hdmiPhase: ""            // switching | settle | ask | back
+    property int hdmiSettle: 8               // seconds for the display to show a picture again
+    property int hdmiLeft: 15                // seconds to keep it
+    property string hdmiChoice: ""           // for apply: <output>=<w>x<h>:<rates>
+    property string hdmiNote: ""
+    property var afterBusy: null             // a backend call waiting for the last one
+    function whenIdle(fn) { if (backend.busy) afterBusy = fn; else fn(); }
+    Connections { target: backend; function onBusyChanged() { if (!backend.busy && afterBusy) { var f = afterBusy; afterBusy = null; f(); } } }
+    readonly property var hdmiRates: hdmi && hdmi.info ? hdmi.info.rates : []
+    function hdmiCalc() {
+        // The calculated rates (not the display's own): what the test EDID holds.
+        return hdmiRates.filter(function (r) { return r.kind !== "monitor"; }).map(function (r) { return r.hz; });
+    }
+    function hdmiKept() {
+        // The ticked calculated rates (the display's own modes always come along).
+        return hdmiRates.filter(function (r) { return r.kind !== "monitor" && hdmiPick[r.hz]; })
+                        .map(function (r) { return r.hz; }).sort(function (a, b) { return a - b; });
+    }
+    function hdmiUntried() { return hdmiKept().filter(function (hz) { return hdmiResult[hz] !== "ok"; }); }
+    function hdmiTick(r) {
+        if (r.kind === "monitor") return;
+        var p = Object.assign({}, hdmiPick); p[r.hz] = !p[r.hz]; hdmiPick = p;
+    }
+    readonly property bool hdmiCanInstall: hdmiKept().length > 0 || hdmiRates.some(function (r) { return r.kind === "monitor"; })
+    function startHdmi() {
+        hdmi = null; hdmiChoice = ""; hdmiNote = ""; sessionPassword = "";
+        if (!askPassword("hdmi")) hdmiLoad();
+    }
+    function hdmiLoad() {
+        hdmiLoading = true; hdmi = null; hdmiSel = 0; hdmiResult = ({}); hdmiPick = ({}); screen = "hdmi";
+        whenIdle(function () { backend.hdmiOptions(sessionPassword); });
+    }
+    function hdmiSwitch(hz) {
+        whenIdle(function () { backend.hdmiTry(sessionPassword, hdmi.connector, hdmi.width, hdmi.height, hz, hdmiCalc().join(",")); });
+    }
+    function hdmiTry(hz) {
+        hdmiHz = hz; hdmiPhase = "switching"; screen = "hdmitest";
+        hdmiSwitch(hz);
+    }
+    function hdmiMark(result) {
+        var r = Object.assign({}, hdmiResult); r[hdmiHz] = result; hdmiResult = r;
+        // Kept: ticked for Install; didn't work: unticked.
+        var p = Object.assign({}, hdmiPick); p[hdmiHz] = result === "ok"; hdmiPick = p;
+    }
+    function hdmiKeep() { if (hdmiPhase !== "ask" && hdmiPhase !== "settle") return; hdmiMark("ok"); hdmiNow = hdmiHz; hdmiPhase = ""; hdmiBackAt = Date.now(); screen = "hdmi"; }
+    function hdmiReject() {
+        // Back to the last rate that worked (at first: the one from before).
+        if (hdmiPhase !== "ask" && hdmiPhase !== "settle" && hdmiPhase !== "failed") return;
+        hdmiMark("fail"); hdmiPhase = "back";
+        hdmiSwitch(hdmiNow);
+    }
+    function hdmiInstall() {
+        if (!hdmiCanInstall) return;
+        hdmiChoice = hdmi.output + "=" + hdmi.width + "x" + hdmi.height + ":" + hdmiKept().join(",");
+        var w = Object.assign({}, want); w.hdmi = true; w.machine = true; w.kpin = true; want = w;
+        screen = "menu"; goReview(false);
+    }
+    function hdmiCancel() {
+        var tried = Object.keys(hdmiResult).length > 0;
+        hdmiPhase = ""; hdmiChoice = "";
+        if (tried && hdmi) whenIdle(function () { backend.hdmiReset(sessionPassword, hdmi.connector, hdmi.width, hdmi.height, hdmi.hz); });
+        sessionPassword = ""; screen = "menu";
+    }
+    Timer {
+        interval: 1000; repeat: true; running: screen === "hdmitest" && (hdmiPhase === "settle" || hdmiPhase === "ask")
+        onTriggered: {
+            if (hdmiPhase === "settle") { hdmiSettle--; if (hdmiSettle <= 0) hdmiPhase = "ask"; return; }
+            hdmiLeft--; if (hdmiLeft <= 0) hdmiReject();
+        }
+    }
     property bool holding: false
     readonly property var bios: status.bios || null
     function biosHint() {
@@ -131,13 +210,15 @@ ApplicationWindow {
     Connections { target: backend; function onStatusChanged() { if (screen === "menu" || screen === "done") syncFromStatus(); } }
 
     function toggle(id) {
+        hdmiNote = "";
         var w = Object.assign({}, want);
         w[id] = !w[id];
         if (id === "gaming" && !w.gaming) { w.single = false; }
         if (id === "single" && w.single) w.gaming = true;
-        // HDMI refresh boost needs someone at the keyboard to confirm each
-        // step: it's only turned on from the terminal menu.
-        if (id === "hdmi" && w.hdmi && !nowOn("hdmi")) return;
+        // Turning HDMI refresh boost on goes through its own screen: pick
+        // the rates and try each one first.
+        if (id === "hdmi" && w.hdmi && !nowOn("hdmi") && !hdmiChoice) { startHdmi(); return; }
+        if (id === "hdmi" && !w.hdmi) hdmiChoice = "";
         if (id === "machine") w.kpin = w.machine;
         if (id === "kpin" && w.kpin) w.machine = true;
         if (id === "hdmi" && w.hdmi) { w.machine = true; w.kpin = true; }
@@ -173,7 +254,8 @@ ApplicationWindow {
         for (var i = 0; i < plan.length; i++) s[plan[i].id] = "wait";
         steps = s;
         screen = "applying";
-        backend.apply(wantedIds(), want.gaming ? boot : "", reapply, password || "");
+        backend.apply(wantedIds(), want.gaming ? boot : "", reapply, password || "", want.hdmi ? hdmiChoice : "");
+        hdmiChoice = "";
     }
     function askPassword(forWhat) {
         pending = forWhat;
@@ -182,12 +264,15 @@ ApplicationWindow {
     }
     function onApplyPressed() {
         if (plan.length === 0) return;
+        // Just typed for the HDMI screen: not asked again.
+        if (hdmiChoice && sessionPassword) { var p = sessionPassword; sessionPassword = ""; startApply(p); return; }
         if (!askPassword("apply")) startApply("");
     }
     function submitPassword() {
         if (!backend.checkPassword(pw.text)) { wrongPassword = true; pw.selectAll(); return; }
         var p = pw.text; pw.text = "";
         if (pending === "bios") { sessionPassword = p; biosCheck(); }
+        else if (pending === "hdmi") { sessionPassword = p; hdmiLoad(); }
         else startApply(p);
     }
     // --- BIOS: check -> warning 1 -> warning 2 -> flash ---
@@ -223,6 +308,32 @@ ApplicationWindow {
             if (ev.event === "start") { s[ev.id] = "run"; steps = s; }
             else if (ev.event === "done") { s[ev.id] = ev.ok ? "ok" : "fail"; steps = s; doneCount++; }
             else if (ev.event === "log") { logModel.append({ line: ev.line }); if (logModel.count > 400) logModel.remove(0); }
+            else if (ev.event === "hdmi-options") {
+                hdmiLoading = false; hdmiSel = 0;
+                hdmi = ev.outputs && ev.outputs.length ? ev.outputs[0] : null;
+                hdmiNow = hdmi ? hdmi.hz : 0;
+                // Straight to the display's own faster mode (the safe one), with
+                // the next rate's Try selected for after that.
+                var rs = hdmi && hdmi.info ? hdmi.info.rates : [];
+                var own = rs.findIndex(function (r) { return r.kind === "monitor"; });
+                if (own >= 0) { hdmiSel = Math.min(own + 1, rs.length - 1); hdmiTry(rs[own].hz); }
+            }
+            else if (ev.event === "hdmi-tried") {
+                if (hdmiPhase === "back") { hdmiPhase = ""; hdmiBackAt = Date.now(); screen = "hdmi"; return; }
+                // Displays take a few seconds to show a picture after a mode
+                // change: the countdown starts after that.
+                // The display's own mode always works: kept without asking.
+                var ownMode = hdmiRates.some(function (r) { return r.kind === "monitor" && Math.abs(r.hz - hdmiHz) < 0.01; });
+                if (ev.ok && ownMode) { hdmiPhase = "ask"; hdmiKeep(); }
+                else if (ev.ok) { hdmiPhase = "settle"; hdmiSettle = 8; hdmiLeft = 15; }
+                else { hdmiPhase = "failed"; hdmiReject(); }
+            }
+            else if (ev.event === "hdmi-reset") { }
+            else if (ev.event === "finished" && (screen === "hdmi" || screen === "hdmitest")) {
+                // Only on an error (sudo): the HDMI commands end without one.
+                runError = ev.error === "wrong-password" ? "The password didn't work." : "sudo isn't available.";
+                failed = []; restartNeeded = false; sessionPassword = ""; screen = "done";
+            }
             else if (ev.event === "bios-ready") { biosChecking = false; biosInfo = ev; biosFocus = 0; holdProgress = 0; screen = "bios1"; }
             else if (ev.event === "finished" && biosChecking) {
                 // The check found nothing to do or a problem: say so.
@@ -264,7 +375,7 @@ ApplicationWindow {
             else if (a === "back") { reapply = false; screen = "menu"; }
         } else if (screen === "password") {
             if (a === "accept" || a === "apply") submitPassword();
-            else if (a === "back") { pw.text = ""; screen = "review"; }
+            else if (a === "back") { pw.text = ""; if (pending === "hdmi") hdmiCancel(); else screen = "review"; }
         } else if (screen === "bios1") {
             if (a === "left") biosFocus = 0;
             else if (a === "right") biosFocus = 1;
@@ -274,6 +385,20 @@ ApplicationWindow {
             if (a === "back") biosCancel();
             else if (a === "hold") holding = true;
             else if (a === "release") { holding = false; if (holdProgress < 1) holdProgress = 0; }
+        } else if (screen === "hdmi") {
+            if (hdmiLoading) { if (a === "back") hdmiCancel(); return; }
+            var n = hdmiRates.length;
+            if (a === "up") hdmiSel = Math.max(0, hdmiSel - 1);
+            else if (a === "down") hdmiSel = Math.min(n, hdmiSel + 1);
+            else if (a === "accept") { if (hdmiSel === n) hdmiInstall(); else hdmiTick(hdmiRates[hdmiSel]); }
+            else if (a === "reapply" && hdmiSel < n && Math.abs(hdmiNow - hdmiRates[hdmiSel].hz) >= 0.5) hdmiTry(hdmiRates[hdmiSel].hz);
+            else if (a === "apply") hdmiInstall();
+            // A second Back meant for the test (it takes a moment to switch
+            // back) would otherwise leave the whole screen.
+            else if (a === "back" && Date.now() - hdmiBackAt > 1500) hdmiCancel();
+        } else if (screen === "hdmitest") {
+            if (a === "accept" || a === "apply") hdmiKeep();
+            else if (a === "back") hdmiReject();
         } else if (screen === "done") {
             if (a === "accept" && restartNeeded) backend.restart();
             else if (a === "back" || a === "accept") { biosRun = false; syncFromStatus(); screen = "menu"; }
@@ -303,7 +428,7 @@ ApplicationWindow {
         else if (k === Qt.Key_Right) act("right");
         else if (k === Qt.Key_Space) act("accept");
         else if (k === Qt.Key_Return || k === Qt.Key_Enter) act(inputType === "remote" || screen !== "menu" ? "accept" : "apply");
-        else if (k === Qt.Key_Escape || k === Qt.Key_Back || k === Qt.Key_Backspace) act("back");
+        else if (k === Qt.Key_Escape || k === Qt.Key_Back || k === Qt.Key_Backspace) { if (!e.isAutoRepeat) act("back"); }
         else if (k === Qt.Key_R) act("reapply");
         else return;
         e.accepted = true;
@@ -334,7 +459,7 @@ ApplicationWindow {
         color: primary ? t.accent : "#232c38"
         border.width: focusRing ? 2 : 0; border.color: t.textHi
         Row { id: br; anchors.centerIn: parent; spacing: 10
-            Glyph { k: parent.parent.k; dark: parent.parent.primary; anchors.verticalCenter: parent.verticalCenter }
+            Glyph { k: parent.parent.k; visible: k !== ""; dark: parent.parent.primary; anchors.verticalCenter: parent.verticalCenter }
             Text { text: parent.parent.text; color: parent.parent.primary ? t.ink : t.text; font.family: t.body; font.pixelSize: 15; font.weight: Font.DemiBold; anchors.verticalCenter: parent.verticalCenter }
         }
         MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: parent.clicked() }
@@ -381,7 +506,7 @@ ApplicationWindow {
                 anchors.left: parent.left; anchors.leftMargin: 40; anchors.verticalCenter: parent.verticalCenter; spacing: 14
                 Image { source: iconUrl; width: 40; height: 40; sourceSize: Qt.size(80, 80); anchors.verticalCenter: parent.verticalCenter }
                 Text { text: "Steamify"; color: t.text; font.family: t.display; font.pixelSize: 28; font.weight: Font.Bold; anchors.verticalCenter: parent.verticalCenter }
-                Text { text: screen === "menu" ? "v" + (status.version || "") : "/ " + ({review: "Review", password: "Password", applying: biosRun ? "BIOS update" : "Applying", done: "Done", bios1: "BIOS update", bios2: "BIOS update"})[screen]
+                Text { text: screen === "menu" ? "v" + (status.version || "") : "/ " + ({review: "Review", password: "Password", applying: biosRun ? "BIOS update" : "Applying", done: "Done", bios1: "BIOS update", bios2: "BIOS update", hdmi: "HDMI refresh boost", hdmitest: "HDMI refresh boost"})[screen]
                        color: t.faint; font.family: screen === "menu" ? t.mono : t.body; font.pixelSize: screen === "menu" ? 13 : 15; anchors.verticalCenter: parent.verticalCenter }
             }
             Rectangle {
@@ -433,6 +558,8 @@ ApplicationWindow {
                             readonly property int rowIndex: rows.findIndex(function (r) { return r.id === modelData.id; })
                             readonly property bool selected: shown && rowIndex === sel
                             readonly property bool on: modelData.kind === "choice" ? true : !!want[modelData.id]
+                            // HDMI refresh boost is set up on its own screen: a button while off.
+                            readonly property bool setup: modelData.id === "hdmi" && !modelData.on
                             onSelectedChanged: if (selected) Qt.callLater(list.showSelected)
                             width: list.width - 12; x: 2
                             height: shown ? 62 : 0
@@ -473,12 +600,19 @@ ApplicationWindow {
                                                     Text { anchors.centerIn: parent; text: parent.modelData[1]; color: boot === parent.modelData[0] ? t.ink : t.mute; font.family: t.body; font.pixelSize: 13; font.weight: Font.DemiBold }
                                                     MouseArea { anchors.fill: parent; onClicked: boot = parent.modelData[0] } } } } }
                                     // toggle: "now on/off" left of the switch, switch on the edge
-                                    Rectangle { id: sw; visible: row.modelData.kind === "toggle"; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                                    Rectangle { id: sw; visible: row.modelData.kind === "toggle" && !row.setup; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                                         width: 46; height: 26; radius: 13; color: row.on ? t.accent : "#343f50"
                                         Behavior on color { ColorAnimation { duration: 120 } }
                                         Rectangle { width: 20; height: 20; radius: 10; color: "#f4f7fb"; y: 3; x: row.on ? 23 : 3; Behavior on x { NumberAnimation { duration: 120 } } } }
-                                    Text { visible: row.modelData.kind === "toggle"; anchors.right: sw.left; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter
+                                    Text { visible: row.modelData.kind === "toggle" && !row.setup; anchors.right: sw.left; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter
                                            text: row.modelData.on ? "now on" : "now off"; color: row.modelData.on ? t.good : t.faint; font.family: t.mono; font.pixelSize: 12 }
+                                    // HDMI refresh boost while off: opens its screen
+                                    Rectangle { visible: row.setup; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                                        width: sut.implicitWidth + 24; height: 30; radius: 8; color: hdmiChoice && want.hdmi ? t.goodBg : "#1b2b40"
+                                        Text { id: sut; anchors.centerIn: parent; font.family: t.body; font.pixelSize: 13; font.weight: Font.DemiBold
+                                               color: hdmiChoice && want.hdmi ? t.good : "#7cc4ff"
+                                               text: hdmiChoice && want.hdmi ? (hdmiChoice.split(":")[1] ? hdmiChoice.split(":")[1].split(",").join(", ") + " Hz ✓" : "Own modes ✓") : "Set up…" }
+                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { sel = row.rowIndex; startHdmi(); } } }
                                     // action
                                     Rectangle { visible: row.modelData.kind === "action"; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                                         width: at.implicitWidth + 24; height: 30; radius: 8; color: t.warnBg
@@ -555,7 +689,7 @@ ApplicationWindow {
                 }
                 Row {
                     anchors.right: parent.right; anchors.rightMargin: 40; anchors.verticalCenter: parent.verticalCenter; spacing: 16
-                    Text { readonly property int n: computePlan().length; text: n === 0 ? "Everything is the way you want it" : n + (n === 1 ? " change" : " changes"); color: t.faint; font.family: t.body; font.pixelSize: 14; anchors.verticalCenter: parent.verticalCenter }
+                    Text { readonly property int n: computePlan().length; text: hdmiNote ? hdmiNote : (n === 0 ? "Everything is the way you want it" : n + (n === 1 ? " change" : " changes")); color: t.faint; font.family: t.body; font.pixelSize: 14; anchors.verticalCenter: parent.verticalCenter }
                     Btn { k: g.apply; text: "Review & apply"; primary: true; focusRing: sel === rows.length; height: 44; onClicked: goReview(false) }
                 }
             }
@@ -753,6 +887,101 @@ ApplicationWindow {
                     Row { spacing: 12
                         Btn { k: g.back; text: "Cancel"; onClicked: biosCancel() }
                         Text { visible: bios && bios.dryRun; text: "Dry run: nothing will be flashed."; color: t.warn; font.family: t.body; font.pixelSize: 14; anchors.verticalCenter: parent.verticalCenter } }
+                }
+            }
+        }
+
+        // ================= HDMI: pick the rates =================
+        Item {
+            visible: screen === "hdmi"
+            anchors.top: header.bottom; anchors.bottom: parent.bottom; width: parent.width
+            Text { visible: hdmiLoading; anchors.centerIn: parent; text: "Reading your display…"; color: t.mute; font.family: t.body; font.pixelSize: 18 }
+            Text { visible: !hdmiLoading && !hdmi; anchors.centerIn: parent; horizontalAlignment: Text.AlignHCenter
+                   text: "No HDMI display found at the desktop.\nThis only works from the Plasma desktop, not in gaming mode."; color: t.mute; font.family: t.body; font.pixelSize: 18 }
+            Column {
+                visible: !hdmiLoading && !!hdmi
+                x: 40; y: 28; width: 740; spacing: 12
+                Text { text: hdmi ? (hdmi.info.name || "HDMI display") + "  ·  " + hdmi.output : ""; color: t.text; font.family: t.display; font.pixelSize: 30; font.weight: Font.DemiBold }
+                Text { text: hdmi ? hdmi.width + "×" + hdmi.height : ""; color: t.mute; font.family: t.mono; font.pixelSize: 14 }
+                Text { visible: hdmiRates.length === 0; width: 740; wrapMode: Text.WordWrap; topPadding: 12; color: t.soft; font.family: t.body; font.pixelSize: 16
+                       text: "This display already runs its fastest rate that fits HDMI at this resolution. Nothing to add." }
+                Repeater {
+                    model: hdmiRates
+                    Rectangle {
+                        required property var modelData; required property int index
+                        readonly property bool own: modelData.kind === "monitor"
+                        readonly property string res: own ? "own" : (hdmiResult[modelData.hz] || "")
+                        width: 740; height: 56; radius: 12
+                        color: hdmiSel === index ? t.cardSel : t.card; border.width: hdmiSel === index ? 2 : 0; border.color: t.accent
+                        readonly property bool ticked: own || !!hdmiPick[modelData.hz]
+                        readonly property bool running: Math.abs(hdmiNow - modelData.hz) < 0.5
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { hdmiSel = parent.index; hdmiTick(parent.modelData); } }
+                        Row { anchors.left: parent.left; anchors.leftMargin: 18; anchors.verticalCenter: parent.verticalCenter; spacing: 16
+                            Rectangle { width: 24; height: 24; radius: 6; anchors.verticalCenter: parent.verticalCenter
+                                color: parent.parent.ticked ? (parent.parent.own ? "#343f50" : t.accent) : "transparent"; border.width: parent.parent.ticked ? 0 : 2; border.color: "#56627a"
+                                Text { anchors.centerIn: parent; text: parent.parent.parent.ticked ? "✓" : ""; color: parent.parent.parent.own ? t.soft : t.ink; font.pixelSize: 15; font.weight: Font.Bold } }
+                            Text { text: parent.parent.modelData.hz + " Hz"; width: 100; color: t.textHi; font.family: t.body; font.pixelSize: 18; font.weight: Font.DemiBold; anchors.verticalCenter: parent.verticalCenter }
+                            Text { width: 380; anchors.verticalCenter: parent.verticalCenter; color: t.soft; font.family: t.body; font.pixelSize: 14
+                                   text: ({ monitor: "The display's own mode · always included", calculated: "Calculated from the display's timing", limit: "Right at the HDMI 2.0 limit · not recommended" })[parent.parent.modelData.kind] }
+                        }
+                        Row { anchors.right: parent.right; anchors.rightMargin: 14; anchors.verticalCenter: parent.verticalCenter; spacing: 12
+                            Chip { anchors.verticalCenter: parent.verticalCenter; visible: parent.parent.res === "own" || parent.parent.res === "fail"
+                                   text: ({ own: "Included", fail: "✗ Didn't work" })[parent.parent.res] || ""
+                                   fg: parent.parent.res === "fail" ? t.bad : (parent.parent.res === "ok" ? t.good : "#b8c3d1")
+                                   bgc: parent.parent.res === "fail" ? t.badBg : (parent.parent.res === "ok" ? t.goodBg : t.line) }
+                            // The rate on screen now: a green marker instead of Try.
+                            Rectangle { visible: parent.parent.running; height: 38; radius: 12; width: rt.implicitWidth + 32; color: t.goodBg
+                                border.width: hdmiSel === parent.parent.index ? 2 : 0; border.color: t.good; anchors.verticalCenter: parent.verticalCenter
+                                Text { id: rt; anchors.centerIn: parent; text: "Running now"; color: t.good; font.family: t.body; font.pixelSize: 15; font.weight: Font.DemiBold } }
+                            Btn { visible: !parent.parent.running; height: 38; focusRing: hdmiSel === parent.parent.index; anchors.verticalCenter: parent.verticalCenter
+                                  k: hdmiSel === parent.parent.index ? g.reapply : ""; text: parent.parent.res === "" || parent.parent.res === "own" ? "Try" : "Try again"
+                                  onClicked: { hdmiSel = parent.parent.index; hdmiTry(parent.parent.modelData.hz); } }
+                        }
+                    }
+                }
+            }
+            Rectangle {
+                visible: !hdmiLoading && !!hdmi
+                x: parent.width - 468; y: 28; width: 428; height: 250; radius: 16; color: t.card
+                Column { anchors.fill: parent; anchors.margins: 24; spacing: 12
+                    Text { text: "HOW IT WORKS"; color: t.faint; font.family: t.body; font.pixelSize: 12; font.weight: Font.DemiBold; font.letterSpacing: 0.8 }
+                    Text { width: parent.width; wrapMode: Text.WordWrap; color: t.soft; font.family: t.body; font.pixelSize: 15; lineHeight: 1.35
+                           text: "Tick the rates to install (" + g.ok + "). Try one first (" + g.reapply + "): it's shown, and you press " + g.ok + " to keep it. No answer, or a black screen, switches back.\n\nInstall adds the ticked rates and the display's own modes; they stay after a restart." }
+                }
+            }
+            Rectangle {
+                anchors.bottom: parent.bottom; width: parent.width; height: 64; color: t.bar
+                Rectangle { width: parent.width; height: 1; color: t.line }
+                Btn { anchors.left: parent.left; anchors.leftMargin: 40; anchors.verticalCenter: parent.verticalCenter; k: g.back; text: "Back to the menu"; onClicked: hdmiCancel() }
+                Text { anchors.right: instBtn.left; anchors.rightMargin: 16; anchors.verticalCenter: parent.verticalCenter; visible: !!hdmi && (!hdmiCanInstall || hdmiUntried().length > 0)
+                       text: !hdmiCanInstall ? "Tick a rate first" : "Not tried: " + hdmiUntried().join(", ") + " Hz"
+                       color: hdmiCanInstall ? t.warn : t.faint; font.family: t.body; font.pixelSize: 14 }
+                Btn { id: instBtn; anchors.right: parent.right; anchors.rightMargin: 40; anchors.verticalCenter: parent.verticalCenter; k: hdmiSel === hdmiRates.length ? g.ok : g.apply
+                      visible: !hdmiLoading && !!hdmi && hdmiRates.length > 0; primary: hdmiCanInstall; opacity: hdmiCanInstall ? 1 : 0.5
+                      focusRing: hdmiSel === hdmiRates.length
+                      text: "Install" + (hdmiKept().length ? " " + hdmiKept().join(", ") + " Hz" : ""); onClicked: hdmiInstall() }
+            }
+        }
+
+        // ================= HDMI: keep this rate? =================
+        Item {
+            visible: screen === "hdmitest"
+            anchors.top: header.bottom; anchors.bottom: parent.bottom; width: parent.width
+            Rectangle {
+                anchors.centerIn: parent; width: 640; height: ht.implicitHeight + 64; radius: 20; color: t.card; border.width: 1; border.color: t.line
+                Column { id: ht; anchors.fill: parent; anchors.margins: 32; spacing: 18
+                    Text { text: hdmiPhase === "ask" || hdmiPhase === "settle" ? "Keep " + hdmiHz + " Hz?" : (hdmiPhase === "back" ? "Switching back…" : "Switching to " + hdmiHz + " Hz…")
+                           color: t.text; font.family: t.display; font.pixelSize: 36; font.weight: Font.DemiBold }
+                    Text { width: parent.width; wrapMode: Text.WordWrap; color: t.soft; font.family: t.body; font.pixelSize: 16; lineHeight: 1.3
+                           text: hdmiPhase === "ask" || hdmiPhase === "settle" ? "Check the picture: sharp, stable, no flicker or dropouts. Your display's menu can show the rate it gets."
+                                                     : "The screen may go black for a moment." }
+                    Column { visible: hdmiPhase === "ask" || hdmiPhase === "settle"; width: parent.width; spacing: 8
+                        Text { text: hdmiPhase === "settle" ? "Waiting for the picture… the countdown starts in " + hdmiSettle + " s" : "Switching back in " + hdmiLeft + " s"; color: t.mute; font.family: t.body; font.pixelSize: 14 }
+                        Rectangle { width: parent.width; height: 10; radius: 5; color: t.line
+                            Rectangle { height: 10; radius: 5; color: t.accent; width: parent.width * hdmiLeft / 15; Behavior on width { NumberAnimation { duration: 900 } } } } }
+                    Row { visible: hdmiPhase === "ask" || hdmiPhase === "settle"; spacing: 12
+                        Btn { k: g.back; text: "Switch back"; onClicked: hdmiReject() }
+                        Btn { k: g.ok; text: "Keep " + hdmiHz + " Hz"; primary: true; onClicked: hdmiKeep() } }
                 }
             }
         }

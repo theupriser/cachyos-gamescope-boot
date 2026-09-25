@@ -8,6 +8,14 @@
 #       turns on the listed components and off the others (like ticking them
 #       in the menu), then streams one JSON object per line: plan, start,
 #       log, done, finished. sudo asks through $SUDO_ASKPASS (no terminal).
+#   steamify.sh --backend apply ... --hdmi <output>=<w>x<h>:<rate>,... hdmi
+#       HDMI refresh boost with the rates the app confirmed.
+#   steamify.sh --backend hdmi-options
+#       hdmi-options event: every HDMI output, its mode and rates to offer.
+#   steamify.sh --backend hdmi-try <connector> <w> <h> <hz> [<rate>...]
+#   steamify.sh --backend hdmi-reset <connector> <w> <h> <hz>
+#       switch to a rate live (hdmi-tried event), or back to the display's
+#       own EDID (hdmi-reset event); the app asks in between.
 #   steamify.sh --backend bios-prepare | bios-flash
 #       the BIOS update in two steps, so the app shows both warnings between
 #       them (bios-ready event: current, newest, checksum, compatible).
@@ -127,6 +135,7 @@ backend_apply() {
         case "$1" in
             --reapply) reapply=true ;;
             --boot) boot="$2"; shift ;;
+            --hdmi) HDMI_CHOICE+=("$2"); shift ;;
             *) want+=("$1") ;;
         esac
         shift
@@ -167,12 +176,34 @@ backend_apply() {
     backend_event finished "\"failed\":$(json_list "${failed[@]}"),\"restart\":$(restart_needed && echo true || echo false)"
 }
 
+backend_hdmi() {
+    # backend_hdmi options|try|reset [args]: the app's HDMI screen. Events
+    # only (no "finished"): the app goes on from its own screen.
+    local what="$1" rc
+    shift
+    backend_sudo || return 1
+    case "$what" in
+        options)
+            sudo pacman -S --needed --noconfirm i2c-tools python >/dev/null 2>&1
+            backend_event hdmi-options "\"outputs\":$(hdmi_options 2>/dev/null)" ;;
+        try)
+            hdmi_try "$@" >/dev/null 2>&1; rc=$?
+            backend_event hdmi-tried "\"hz\":$4,\"ok\":$([[ $rc -eq 0 ]] && echo true || echo false)" ;;
+        reset)
+            hdmi_reset "$@" >/dev/null 2>&1
+            backend_event hdmi-reset ;;
+    esac
+}
+
 backend_main() {
     case "${1:-}" in
         status) backend_status ;;
         apply) shift; backend_apply "$@" ;;
         bios-prepare) backend_bios_prepare ;;
         bios-flash) backend_bios_flash ;;
+        hdmi-options) backend_hdmi options ;;
+        hdmi-try) shift; backend_hdmi try "$@" ;;
+        hdmi-reset) shift; backend_hdmi reset "$@" ;;
         *) err "Usage: steamify.sh --backend status | apply [--reapply] [--boot gamescope|desktop] <id>..."; return 2 ;;
     esac
 }
