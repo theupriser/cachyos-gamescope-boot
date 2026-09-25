@@ -316,51 +316,76 @@ ApplicationWindow {
                         Text { text: "What do you want?"; color: t.text; font.family: t.display; font.pixelSize: 30; font.weight: Font.DemiBold }
                     }
                     ListView {
-                        id: list; width: parent.width; height: parent.height - 50; clip: true; spacing: 6
-                        model: rows
-                        currentIndex: Math.min(sel, rows.length - 1)
-                        highlightFollowsCurrentItem: false
-                        onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
+                        id: list; width: parent.width; height: parent.height - 50; clip: true; spacing: 0
+                        // A fixed model: sub-items fold in and out instead of the
+                        // list being rebuilt (and jumping) on every tick.
+                        model: items
                         ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
-                        delegate: Rectangle {
+                        function showSelected() {
+                            for (var i = 0; i < count; i++) {
+                                var d = itemAtIndex(i);
+                                if (d && d.selected) { positionViewAtIndex(i, ListView.Contain); return; }
+                            }
+                        }
+                        delegate: Item {
                             id: row
                             required property var modelData
                             required property int index
-                            readonly property bool selected: index === sel
+                            readonly property bool shown: !modelData.parent || !!want[modelData.parent]
+                            readonly property int rowIndex: rows.findIndex(function (r) { return r.id === modelData.id; })
+                            readonly property bool selected: shown && rowIndex === sel
                             readonly property bool on: modelData.kind === "choice" ? true : !!want[modelData.id]
-                            width: list.width - 12; height: 56; radius: 12
-                            x: 2
-                            color: selected ? t.cardSel : t.card
-                            border.width: selected ? 2 : 0; border.color: t.accent
-                            opacity: modelData.kind === "action" ? 0.6 : 1
-                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                                onClicked: { inputType = "keyboard"; if (sel === row.index) act("accept"); else sel = row.index; } }
-                            Row {
-                                anchors.fill: parent; anchors.leftMargin: modelData.parent ? 22 : 16; anchors.rightMargin: 16; spacing: 14
-                                Text { visible: !!modelData.parent; text: "└"; color: "#56627a"; font.pixelSize: 18; anchors.verticalCenter: parent.verticalCenter }
-                                Column { anchors.verticalCenter: parent.verticalCenter; spacing: 2
-                                    width: parent.width - (modelData.parent ? 40 : 0) - (modelData.kind === "choice" ? 200 : 150)
-                                    Text { text: label(modelData); color: t.textHi; font.family: t.body; font.pixelSize: 17; font.weight: Font.DemiBold; elide: Text.ElideRight; width: parent.width }
-                                    Text { text: (texts[modelData.id] && texts[modelData.id].hint) || modelData.hint; color: t.mute; font.family: t.body; font.pixelSize: 13; elide: Text.ElideRight; width: parent.width }
+                            onSelectedChanged: if (selected) Qt.callLater(list.showSelected)
+                            width: list.width - 12; x: 2
+                            height: shown ? 62 : 0
+                            opacity: shown ? 1 : 0
+                            clip: true
+                            Behavior on height { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+                            Behavior on opacity { NumberAnimation { duration: 160 } }
+                            Rectangle {
+                                id: card
+                                width: parent.width; height: 56; radius: 12
+                                color: row.selected ? t.cardSel : t.card
+                                border.width: row.selected ? 2 : 0; border.color: t.accent
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                    onClicked: { inputType = "keyboard"; if (row.selected) act("accept"); else sel = row.rowIndex; } }
+                                // Left: indent, name and hint
+                                Text { id: branch; visible: !!row.modelData.parent; x: 20; anchors.verticalCenter: parent.verticalCenter
+                                       text: "└"; color: "#56627a"; font.pixelSize: 18 }
+                                Column {
+                                    anchors.verticalCenter: parent.verticalCenter; spacing: 2
+                                    x: row.modelData.parent ? 46 : 16
+                                    width: controls.x - x - 16
+                                    opacity: row.modelData.kind === "action" ? 0.6 : 1
+                                    Text { text: label(row.modelData); color: t.textHi; font.family: t.body; font.pixelSize: 17; font.weight: Font.DemiBold; elide: Text.ElideRight; width: parent.width }
+                                    Text { text: (texts[row.modelData.id] && texts[row.modelData.id].hint) || row.modelData.hint; color: t.mute; font.family: t.body; font.pixelSize: 13; elide: Text.ElideRight; width: parent.width }
                                 }
-                                // choice
-                                Rectangle { visible: modelData.kind === "choice"; anchors.verticalCenter: parent.verticalCenter
-                                    width: 170; height: 32; radius: 10; color: t.bg
-                                    Row { anchors.centerIn: parent; spacing: 4
-                                        Repeater { model: [["gamescope", "Gaming"], ["desktop", "Desktop"]]
-                                            Rectangle { required property var modelData
-                                                width: 80; height: 26; radius: 7; color: boot === modelData[0] ? t.accent : "transparent"
-                                                Text { anchors.centerIn: parent; text: parent.modelData[1]; color: boot === parent.modelData[0] ? t.ink : t.mute; font.family: t.body; font.pixelSize: 13; font.weight: Font.DemiBold }
-                                                MouseArea { anchors.fill: parent; onClicked: boot = parent.modelData[0] } } } } }
-                                // toggle
-                                Row { visible: modelData.kind === "toggle"; anchors.verticalCenter: parent.verticalCenter; spacing: 12
-                                    Text { text: modelData.on ? "now on" : "now off"; color: modelData.on ? t.good : t.faint; font.family: t.mono; font.pixelSize: 12; width: 56; horizontalAlignment: Text.AlignRight; anchors.verticalCenter: parent.verticalCenter }
-                                    Rectangle { width: 46; height: 26; radius: 13; color: row.on ? t.accent : "#343f50"; anchors.verticalCenter: parent.verticalCenter
-                                        Rectangle { width: 20; height: 20; radius: 10; color: "#f4f7fb"; y: 3; x: row.on ? 23 : 3; Behavior on x { NumberAnimation { duration: 120 } } } } }
-                                // action
-                                Rectangle { visible: modelData.kind === "action"; anchors.verticalCenter: parent.verticalCenter
-                                    width: at.implicitWidth + 24; height: 30; radius: 8; color: t.warnBg
-                                    Text { id: at; anchors.centerIn: parent; text: "In the terminal"; color: t.warn; font.family: t.body; font.pixelSize: 13; font.weight: Font.DemiBold } }
+                                // Right: every control ends on the same edge
+                                Item {
+                                    id: controls
+                                    anchors.right: parent.right; anchors.rightMargin: 16; anchors.verticalCenter: parent.verticalCenter
+                                    width: 180; height: 32
+                                    // choice
+                                    Rectangle { visible: row.modelData.kind === "choice"; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                                        width: 172; height: 32; radius: 10; color: t.bg
+                                        Row { anchors.centerIn: parent; spacing: 4
+                                            Repeater { model: [["gamescope", "Gaming"], ["desktop", "Desktop"]]
+                                                Rectangle { required property var modelData
+                                                    width: 80; height: 26; radius: 7; color: boot === modelData[0] ? t.accent : "transparent"
+                                                    Text { anchors.centerIn: parent; text: parent.modelData[1]; color: boot === parent.modelData[0] ? t.ink : t.mute; font.family: t.body; font.pixelSize: 13; font.weight: Font.DemiBold }
+                                                    MouseArea { anchors.fill: parent; onClicked: boot = parent.modelData[0] } } } } }
+                                    // toggle: "now on/off" left of the switch, switch on the edge
+                                    Rectangle { id: sw; visible: row.modelData.kind === "toggle"; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                                        width: 46; height: 26; radius: 13; color: row.on ? t.accent : "#343f50"
+                                        Behavior on color { ColorAnimation { duration: 120 } }
+                                        Rectangle { width: 20; height: 20; radius: 10; color: "#f4f7fb"; y: 3; x: row.on ? 23 : 3; Behavior on x { NumberAnimation { duration: 120 } } } }
+                                    Text { visible: row.modelData.kind === "toggle"; anchors.right: sw.left; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter
+                                           text: row.modelData.on ? "now on" : "now off"; color: row.modelData.on ? t.good : t.faint; font.family: t.mono; font.pixelSize: 12 }
+                                    // action
+                                    Rectangle { visible: row.modelData.kind === "action"; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                                        width: at.implicitWidth + 24; height: 30; radius: 8; color: t.warnBg
+                                        Text { id: at; anchors.centerIn: parent; text: "In the terminal"; color: t.warn; font.family: t.body; font.pixelSize: 13; font.weight: Font.DemiBold } }
+                                }
                             }
                         }
                     }
