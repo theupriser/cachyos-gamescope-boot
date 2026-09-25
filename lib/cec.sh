@@ -12,11 +12,18 @@ CEC_PKGS=(cecd cec-audio-control inputattach-cec-units)
 # after cecd so it never misses it at login.
 CEC_ORDER_DROPIN=/etc/systemd/user/steamos-manager.service.d/10-steamify-after-cecd.conf
 
-restart_steamos_manager() {
-    # steamos-manager only offers its HDMI-CEC interface (Steam's CEC
-    # settings) when cecd was there at its start.
-    systemctl --user is-active -q steamos-manager.service 2>/dev/null &&
-        systemctl --user restart steamos-manager.service
+cec_link_steamos_manager() {
+    # On a Steam Machine: steamos-manager writes cecd's config from Steam's
+    # CEC settings (its configure-cecd unit, run before cecd), and only
+    # offers Steam those settings when cecd was there at its start. Also
+    # called by Steam Machine support, which installs steamos-manager after
+    # this item ran.
+    pacman -Q steamos-manager >/dev/null 2>&1 || return 0
+    systemctl --user daemon-reload
+    systemctl --user enable steamos-manager-configure-cecd.service 2>/dev/null
+    systemctl --user start steamos-manager-configure-cecd.service 2>/dev/null
+    systemctl --user restart cecd.service 2>/dev/null
+    systemctl --user restart steamos-manager.service 2>/dev/null
     return 0
 }
 
@@ -71,10 +78,9 @@ cec_enable() {
     printf '%s\n' "# Written by Steamify: steamos-manager only sees cecd if it runs at its start." \
         '[Unit]' 'After=cecd.service' | sudo tee "$CEC_ORDER_DROPIN" >/dev/null
     systemctl --user daemon-reload
-    systemctl --user enable steamos-manager-configure-cecd.service 2>/dev/null
+    cec_link_steamos_manager
     if compgen -G "/dev/cec*" >/dev/null; then
         systemctl --user restart cecd.service 2>/dev/null
-        restart_steamos_manager
         ok "HDMI-CEC on ($(cd /dev && echo cec*)). Turn on CEC on your TV too (e.g. Sony: BRAVIA Sync, Samsung: Anynet+, LG: SimpLink)."
     else
         warn "No CEC device (/dev/cec*) found: your GPU may not support CEC. A USB CEC adapter"
@@ -95,7 +101,8 @@ cec_disable() {
         state_clear cec
     fi
     sudo udevadm control --reload
-    restart_steamos_manager
+    systemctl --user is-active -q steamos-manager.service 2>/dev/null &&
+        systemctl --user restart steamos-manager.service
     ok "HDMI-CEC removed."
 }
 
