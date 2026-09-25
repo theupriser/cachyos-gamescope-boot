@@ -19,16 +19,21 @@ VERSION=1.1.4
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-for lib in common state packages login-manager single-user steam-desktop steam-machine cec boot-session vapor-theme steamos-extras bios desktop-shortcut wizard-shortcut menu; do
+for lib in common state packages login-manager single-user steam-desktop steam-machine cec boot-session vapor-theme steamos-extras bios desktop-shortcut wizard-shortcut menu backend; do
     # shellcheck source=/dev/null
     source "$SCRIPT_DIR/lib/$lib.sh"
 done
 
 require_root_helper
 
-echo -e "${c_bold}Steamify CachyOS${c_reset} v$VERSION"
-echo "Turn the SteamOS-style parts on or off. The menu shows what is on now;"
-echo "anything you turn off is put back the way it was."
+BACKEND=false
+[[ "${1:-}" == --backend ]] && BACKEND=true
+
+if [[ "$BACKEND" == false ]]; then
+    echo -e "${c_bold}Steamify CachyOS${c_reset} v$VERSION"
+    echo "Turn the SteamOS-style parts on or off. The menu shows what is on now;"
+    echo "anything you turn off is put back the way it was."
+fi
 
 if ! command -v pacman >/dev/null 2>&1; then
     err "This doesn't look like an Arch/CachyOS system (no pacman found). Aborting."
@@ -97,6 +102,15 @@ quit_prompt() {
     esac
     return 0
 }
+
+# The graphical app (steamify-ui) drives the same components through
+# lib/backend.sh instead of the menu.
+if [[ "$BACKEND" == true ]]; then
+    RESTART_FOR_LOGIN=false
+    shift
+    backend_main "$@"
+    exit $?
+fi
 
 # Menu loop: after each run the menu comes back with the new state, until
 # the user quits; the restart question comes then, once, for everything.

@@ -1,0 +1,329 @@
+#!/usr/bin/env python3
+"""Steamify CachyOS - graphical app (v2).
+
+A controller-, TV remote- and keyboard-friendly front end for steamify.sh:
+the components and their logic stay in lib/*.sh, reached through
+`steamify.sh --backend status|apply` (lib/backend.sh). Needs PySide6
+(pacman -S pyside6).
+
+    steamify-ui [--windowed|--fullscreen]
+"""
+
+import json
+import os
+import select
+import shutil
+import stat
+import struct
+import sys
+import tempfile
+import threading
+import time
+
+HERE = os.path.dirname(os.path.realpath(__file__))
+
+try:
+    from PySide6.QtCore import (QObject, QProcess, QProcessEnvironment,
+                                Property, Signal, Slot, QUrl, SLOT)
+    from PySide6.QtGui import QGuiApplication, QIcon
+    from PySide6.QtQml import QQmlApplicationEngine
+    from PySide6.QtDBus import QDBusConnection
+except ImportError:
+    msg = ("Steamify's app needs PySide6 (Qt for Python).\n"
+           "Install it with:  sudo pacman -S pyside6\n"
+           "or run the terminal version: steamify.sh")
+    print(msg, file=sys.stderr)
+    if shutil.which("kdialog"):
+        os.system("kdialog --title Steamify --sorry " + json.dumps(msg))
+    sys.exit(1)
+
+
+def find_script():
+    """steamify.sh next to the app: the repository (../steamify.sh) or an
+    install that keeps both in one folder."""
+    for p in (os.path.join(HERE, "..", "steamify.sh"),
+              os.path.join(HERE, "steamify.sh")):
+        if os.path.isfile(p):
+            return os.path.realpath(p)
+    return None
+
+
+# --- Controller input -------------------------------------------------------
+# Qt 6 has no gamepad module: read the evdev device directly. Controllers
+# are tagged uaccess, so the logged-in user may read them.
+
+EV_KEY, EV_ABS = 0x01, 0x03
+BUTTONS = {0x130: "a", 0x131: "b", 0x133: "y", 0x134: "x",  # SOUTH EAST NORTH WEST
+           0x13a: "select", 0x13b: "start", 0x13c: "guide",
+           0x220: "up", 0x221: "down", 0x222: "left", 0x223: "right"}  # BTN_DPAD_*
+ABS_X, ABS_Y, ABS_HAT0X, ABS_HAT0Y = 0x00, 0x01, 0x10, 0x11
+EVENT = struct.Struct("llHHi")
+
+
+def controller_devices():
+    """/dev/input/eventN of every device that has a gamepad's south button."""
+    found = []
+    base = "/sys/class/input"
+    for name in sorted(os.listdir(base)):
+        if not name.startswith("event"):
+            continue
+        try:
+            with open(os.path.join(base, name, "device", "capabilities", "key")) as f:
+                words = f.read().split()
+        except OSError:
+            continue
+        bits = 0
+        for w in words:
+            bits = (bits << 64) | int(w, 16)
+        if bits >> 0x130 & 1:
+            found.append("/dev/input/" + name)
+    return found
+
+
+class Gamepad(QObject):
+    """Emits button("a"|"b"|"x"|"y"|"up"|...) from any controller."""
+    button = Signal(str)
+
+    def __init__(self):
+        super().__init__()
+        self._stop = False
+        threading.Thread(target=self._run, daemon=True).start()
+
+    def _run(self):
+        files = {}
+        stick = {ABS_X: 0, ABS_Y: 0}
+        last_scan = 0
+        while not self._stop:
+            if time.time() - last_scan > 2:  # plugged in or out
+                last_scan = time.time()
+                for path in controller_devices():
+                    if path not in files:
+                        try:
+                            files[path] = open(path, "rb", buffering=0)
+                        except OSError:
+                            pass
+            if not files:
+                time.sleep(0.5)
+                continue
+            try:
+                ready, _, _ = select.select(list(files.values()), [], [], 0.5)
+            except (OSError, ValueError):
+                ready = []
+            for f in ready:
+                try:
+                    data = f.read(EVENT.size * 32)
+                except OSError:
+                    data = b""
+                if not data:
+                    files = {p: x for p, x in files.items() if x is not f}
+                    continue
+                for off in range(0, len(data) - EVENT.size + 1, EVENT.size):
+                    _, _, typ, code, value = EVENT.unpack_from(data, off)
+                    if typ == EV_KEY and value == 1 and code in BUTTONS:
+                        self.button.emit(BUTTONS[code])
+                    elif typ == EV_ABS and code in (ABS_HAT0X, ABS_HAT0Y) and value:
+                        self.button.emit({(ABS_HAT0X, -1): "left", (ABS_HAT0X, 1): "right",
+                                          (ABS_HAT0Y, -1): "up", (ABS_HAT0Y, 1): "down"}[(code, value)])
+                    elif typ == EV_ABS and code in stick:
+                        # Left stick as a D-pad: one step per push past half-way.
+                        was = stick[code]
+                        now = -1 if value < -16000 else (1 if value > 16000 else 0)
+                        stick[code] = now
+                        if now and not was:
+                            self.button.emit({(ABS_X, -1): "left", (ABS_X, 1): "right",
+                                              (ABS_Y, -1): "up", (ABS_Y, 1): "down"}[(code, now)])
+
+
+# --- Backend ----------------------------------------------------------------
+
+class Backend(QObject):
+    statusChanged = Signal()
+    event = Signal("QVariant")          # one parsed JSON event from apply
+    busyChanged = Signal()
+    remotePressed = Signal()           # a key from the TV remote (cecd)
+
+    def __init__(self, script):
+        super().__init__()
+        self._script = script
+        self._status = {}
+        self._busy = False
+        self._proc = None
+        self._buf = b""
+        self._secret_dir = None
+        # The TV remote's keys reach Qt as keys; cecd also announces them on
+        # D-Bus, which tells the app they came from the remote.
+        try:
+            QDBusConnection.sessionBus().connect(
+                "com.steampowered.CecDaemon1", "", "com.steampowered.CecDaemon1.CecDevice1",
+                "UserControlPressed", self, SLOT("_on_remote()"))
+        except Exception as e:  # no remote detection; keys still work
+            print("steamify-ui: no CEC remote detection:", e, file=sys.stderr)
+
+    @Slot()
+    def _on_remote(self):
+        self.remotePressed.emit()
+
+    def _get_status(self):
+        return self._status
+
+    status = Property("QVariant", _get_status, notify=statusChanged)
+
+    def _get_busy(self):
+        return self._busy
+
+    busy = Property(bool, _get_busy, notify=busyChanged)
+
+    @Slot(result=str)
+    def user(self):
+        return os.environ.get("USER") or os.getlogin()
+
+    @Slot()
+    def refresh(self):
+        p = QProcess(self)
+        p.setProgram("bash")
+        p.setArguments([self._script, "--backend", "status"])
+
+        def done(*_):
+            try:
+                self._status = json.loads(bytes(p.readAllStandardOutput()).decode())
+            except ValueError:
+                self._status = {"error": bytes(p.readAllStandardError()).decode()[-500:]}
+            self.statusChanged.emit()
+            p.deleteLater()
+        p.finished.connect(done)
+        p.start()
+
+    def _make_askpass(self, password):
+        """A private folder with the password, a helper that prints it for
+        `sudo -A`, and a `sudo` that always uses the helper (makepkg and
+        yay call plain sudo)."""
+        base = os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()
+        d = tempfile.mkdtemp(prefix="steamify-", dir=base)
+        os.chmod(d, stat.S_IRWXU)
+        secret = os.path.join(d, "secret")
+        fd = os.open(secret, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(password + "\n")
+        askpass = os.path.join(d, "askpass")
+        with open(askpass, "w") as f:
+            f.write("#!/bin/sh\nexec cat %s\n" % json.dumps(secret))
+        os.chmod(askpass, 0o700)
+        bindir = os.path.join(d, "bin")
+        os.mkdir(bindir)
+        wrapper = os.path.join(bindir, "sudo")
+        with open(wrapper, "w") as f:
+            f.write("#!/bin/sh\nexec /usr/bin/sudo -A \"$@\"\n")
+        os.chmod(wrapper, 0o700)
+        return d, askpass, bindir
+
+    def _drop_askpass(self):
+        if self._secret_dir:
+            shutil.rmtree(self._secret_dir, ignore_errors=True)
+            self._secret_dir = None
+
+    @Slot("QVariant", str, bool, str)
+    def apply(self, ids, boot, reapply, password):
+        if self._busy:
+            return
+        args = [self._script, "--backend", "apply"]
+        if reapply:
+            args.append("--reapply")
+        if boot:
+            args += ["--boot", boot]
+        args += list(ids)
+        env = QProcessEnvironment.systemEnvironment()
+        if password:
+            self._secret_dir, askpass, bindir = self._make_askpass(password)
+            env.insert("SUDO_ASKPASS", askpass)
+            env.insert("PATH", bindir + ":" + env.value("PATH"))
+        p = QProcess(self)
+        p.setProcessEnvironment(env)
+        p.setProcessChannelMode(QProcess.MergedChannels)
+        p.setProgram("bash")
+        p.setArguments(args)
+        self._buf = b""
+        p.readyReadStandardOutput.connect(lambda: self._read(p))
+        p.finished.connect(lambda *_: self._finished(p))
+        self._proc = p
+        self._busy = True
+        self.busyChanged.emit()
+        p.start()
+
+    def _read(self, p):
+        self._buf += bytes(p.readAllStandardOutput())
+        while b"\n" in self._buf:
+            line, self._buf = self._buf.split(b"\n", 1)
+            text = line.decode(errors="replace")
+            try:
+                ev = json.loads(text)
+            except ValueError:
+                ev = {"event": "log", "id": "", "line": text}
+            if isinstance(ev, dict):
+                self.event.emit(ev)
+
+    def _finished(self, p):
+        self._read(p)
+        self._drop_askpass()
+        self._busy = False
+        self.busyChanged.emit()
+        p.deleteLater()
+        self.refresh()
+
+    @Slot(str, result=bool)
+    def checkPassword(self, password):
+        """True if sudo accepts the password (or needs none)."""
+        import subprocess
+        if subprocess.run(["sudo", "-n", "true"], capture_output=True).returncode == 0:
+            return True
+        r = subprocess.run(["sudo", "-S", "-k", "-p", "", "true"],
+                           input=(password + "\n").encode(), capture_output=True)
+        return r.returncode == 0
+
+    @Slot(result=bool)
+    def needsPassword(self):
+        import subprocess
+        return subprocess.run(["sudo", "-n", "true"], capture_output=True).returncode != 0
+
+    @Slot()
+    def restart(self):
+        QProcess.startDetached("systemctl", ["reboot"])
+
+    def shutdown(self):
+        if self._proc and self._proc.state() != QProcess.NotRunning:
+            self._proc.kill()
+            self._proc.waitForFinished(3000)
+        self._drop_askpass()
+
+
+def main():
+    script = find_script()
+    if not script:
+        print("steamify-ui: can't find steamify.sh next to the app.", file=sys.stderr)
+        return 1
+    in_gamescope = bool(os.environ.get("GAMESCOPE_WAYLAND_DISPLAY")) or \
+        os.environ.get("XDG_CURRENT_DESKTOP", "").lower() == "gamescope"
+    fullscreen = "--fullscreen" in sys.argv or (in_gamescope and "--windowed" not in sys.argv)
+
+    app = QGuiApplication(sys.argv)
+    app.setApplicationName("Steamify")
+    app.setDesktopFileName("steamify-ui")
+    icon = os.path.join(HERE, "..", "assets", "steam-gaming-settings.svg")
+    if os.path.isfile(icon):
+        app.setWindowIcon(QIcon(icon))
+
+    backend = Backend(script)
+    pad = Gamepad()
+    engine = QQmlApplicationEngine()
+    engine.setInitialProperties({"backend": backend, "gamepad": pad,
+                                 "fullscreen": fullscreen,
+                                 "iconUrl": QUrl.fromLocalFile(os.path.realpath(icon)).toString()})
+    engine.load(os.path.join(HERE, "qml", "Main.qml"))
+    if not engine.rootObjects():
+        return 1
+    app.aboutToQuit.connect(backend.shutdown)
+    backend.refresh()
+    return app.exec()
+
+
+if __name__ == "__main__":
+    sys.exit(main())
