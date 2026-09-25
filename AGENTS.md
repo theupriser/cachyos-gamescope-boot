@@ -161,9 +161,14 @@ gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
   now? [Y/n]" (`quit_prompt`): `n` goes back to the menu, the next `q` asks
   again. Scripted input that runs out quits without restarting (never
   restart on EOF: `ask_yn` would take its default).
-- Steamify shortcut (`launcher`): the icon runs `curl | bash` of
-  `releases/latest/download/steamify.sh` in Konsole, so it's
-  always the newest release. Its icon, `assets/steam-gaming-settings.svg`
+- Steamify shortcut (`launcher`): "Steamify CachyOS" (desktop and launcher,
+  id `steamify-ui.desktop`, the app's own id) runs `curl | bash` of
+  `releases/latest/download/steamify-app.sh` without a terminal (in Konsole
+  only while PySide6 is missing, for sudo); "Steamify Terminal" (launcher)
+  runs `steamify.sh` in Konsole. Both always the newest release. The entry
+  has `X-Steamify-Shortcut=true`: steamify-app.sh doesn't overwrite it, and
+  disable only removes it then. A pre-2.0.1 shortcut (terminal only) is
+  ticked by `launcher_repair`. Its icon, `assets/steam-gaming-settings.svg`
   (Valve's GPL-2.0 return icon with a gear), is a release asset too, and is
   downloaded from there (Steam's icon if that fails). Desktop files are
   written with their mode already set (`install_executable`): Plasma opens a

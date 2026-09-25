@@ -25,8 +25,9 @@ Steam Machine.
    KDE wallet password prompts (e.g. from Brave). Typing a password with a
    controller is no fun
    ([details](TECHNICAL.md#single-user-mode-sddm-no-locking)).
-5. **Steamify shortcut** - an icon on the desktop and in the launcher that
-   opens the newest Steamify, so you don't need the install command again.
+5. **Steamify shortcut** - "Steamify CachyOS" on the desktop and in the
+   launcher opens the newest Steamify app, so you don't need the install
+   command again. "Steamify Terminal" in the launcher opens the terminal menu.
 6. **HDMI-CEC** (experimental; off by default, on by default on a Steam
    Machine) - use Steam with your TV's
    remote, and the TV turns on and off with the PC. Needs a PC with CEC (like
