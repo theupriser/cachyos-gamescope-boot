@@ -5,6 +5,13 @@ All notable changes, per version and per commit. Versions follow
 `steamify.sh`. Versions before 0.7.0 were numbered afterwards,
 one per merged pull request.
 
+## 1.1.4 - 2026-09-25
+
+- **fix: No lock screen in single user mode before a restart**
+  - The screen locker only read the new settings at the next login, so the
+    PC still locked after 5 minutes idle until then. Turning single user
+    mode on or off now tells it to reload them right away.
+
 ## 1.1.3 - 2026-09-25
 
 - **fix: HDMI-CEC settings shown in Steam**
