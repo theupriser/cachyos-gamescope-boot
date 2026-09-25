@@ -22,6 +22,8 @@ one per merged pull request.
   - Installed kernel headers are no longer updated by the wizard, so the
     pinned kernel keeps matching headers.
   - The BIOS item moves down one (9 on a Steam Machine).
+- **docs: Shorter README, with a Steam Machine section**
+  - How it works moved to `TECHNICAL.md`, problems to `TROUBLESHOOTING.md`.
 
 ## 0.10.0 - 2026-09-24
 

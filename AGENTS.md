@@ -17,7 +17,7 @@ gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
   logic here.
 - `lib/*.sh` - one file per responsibility, each defining functions only
   (no top-level side effects besides constants). See the table in
-  `README.md`.
+  `TECHNICAL.md`.
 - **Components.** Every menu item `<id>` (listed in `COMPONENTS` and `LABEL`
   in `lib/menu.sh`) provides `<id>_status` (return 0 if on, detected from
   the system, no state file needed), `<id>_enable` and `<id>_disable`, all

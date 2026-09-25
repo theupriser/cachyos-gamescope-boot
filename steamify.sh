@@ -10,7 +10,7 @@
 # them on or off to match what the user picks; turning one off restores
 # what was there before (system files from .bak-gamescope-wizard backups,
 # KDE settings from the undo journal in lib/state.sh). Components live in
-# lib/, see README.md. Safe to re-run.
+# lib/, see TECHNICAL.md. Safe to re-run.
 
 set -uo pipefail
 
