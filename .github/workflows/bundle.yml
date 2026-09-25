@@ -5,6 +5,9 @@
 # release are moved to it, so both of these always get the newest version:
 #   curl -fsSL https://github.com/theupriser/steamify-cachyos/releases/latest/download/steamify.sh | bash
 #   curl -fsSL https://github.com/theupriser/steamify-cachyos/releases/download/latest/steamify.sh | bash
+# Each release also has the app (v2): steamify-app.tar.gz (ui/, steamify.sh,
+# lib/, the icon) and its launcher, run with:
+#   curl -fsSL https://github.com/theupriser/steamify-cachyos/releases/latest/download/steamify-app.sh | bash
 # Pull requests only build and check it, and warn when VERSION is already released.
 name: Single-file build
 
@@ -28,17 +31,26 @@ jobs:
       - name: Build
         run: |
           .github/tools/bundle.sh dist/steamify.sh
+          # The app: sources, not the single-file build (its backend mode runs
+          # steamify.sh from its own folder).
+          tar -czf dist/steamify-app.tar.gz steamify.sh lib ui assets/steam-gaming-settings.svg LICENSE.md
+          cp ui/steamify-app.sh dist/steamify-app.sh
 
       - name: Check
         run: |
           bash -n dist/steamify.sh
           # SC2034/SC2154: variables used across the inlined modules.
           shellcheck -S warning -e SC2034,SC2154 dist/steamify.sh
+          shellcheck -S warning dist/steamify-app.sh
+          python3 -m py_compile ui/steamify-ui
 
       - uses: actions/upload-artifact@v4
         with:
           name: steamify
-          path: dist/steamify.sh
+          path: |
+            dist/steamify.sh
+            dist/steamify-app.tar.gz
+            dist/steamify-app.sh
 
       - name: Version
         id: version
@@ -71,9 +83,13 @@ jobs:
 
               curl -fsSL https://github.com/${{ github.repository }}/releases/latest/download/steamify.sh | bash
 
+          Or the app (v2):
+
+              curl -fsSL https://github.com/${{ github.repository }}/releases/latest/download/steamify-app.sh | bash
+
           ## Changes in v$VERSION
           $changes"
-          gh release create "v$VERSION" dist/steamify.sh assets/steam-gaming-settings.svg \
+          gh release create "v$VERSION" dist/steamify.sh dist/steamify-app.sh dist/steamify-app.tar.gz assets/steam-gaming-settings.svg \
               --target "$GITHUB_SHA" --title "Steamify CachyOS v$VERSION" --notes "$notes" --latest
 
           # "latest" follows the newest version tag, for the older install URL
@@ -86,4 +102,4 @@ jobs:
           else
             gh release create latest --title "Steamify CachyOS - latest (v$VERSION)" --notes "$latest_notes" --latest=false
           fi
-          gh release upload latest dist/steamify.sh assets/steam-gaming-settings.svg --clobber
+          gh release upload latest dist/steamify.sh dist/steamify-app.sh dist/steamify-app.tar.gz assets/steam-gaming-settings.svg --clobber
