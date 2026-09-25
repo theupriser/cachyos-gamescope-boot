@@ -5,15 +5,16 @@
 
 # Menu order. Components are turned on in this order and off in reverse;
 # gaming must come first (single user builds on it).
-COMPONENTS=(gaming boot theme glyphs single launcher machine kpin bios)
+COMPONENTS=(gaming boot theme glyphs single launcher cec machine kpin bios)
 # One-off actions rather than on/off components: never preselected, never
 # re-applied, not listed as on or off.
 ACTIONS=(bios)
 # Sub-options, shown indented under their parent and only while it's ticked.
 declare -A PARENT=([boot]=gaming [kpin]=machine)
 # Never preselected on a first run: booting into the desktop is a choice,
-# gamescope is the default.
-NO_PRESELECT=(boot)
+# gamescope is the default; HDMI-CEC is opt-in (it can wake the machine or
+# upset other devices on the TV, even on SteamOS).
+NO_PRESELECT=(boot cec)
 
 declare -A LABEL=(
     [gaming]="SteamOS conversion: boot into gaming mode, Steam on the desktop"
@@ -22,6 +23,7 @@ declare -A LABEL=(
     [glyphs]="Install Steam Deck/Machine icons: Deck button icons in gaming mode"
     [single]="Single user mode: no password, lock screen or log out (SDDM)"
     [launcher]="Steamify shortcut: desktop icon to run this again"
+    [cec]="HDMI-CEC: use Steam with the TV remote, TV on/off with the PC (experimental)"
     [machine]="Steam Machine support: LED bar driver, hardware settings in Steam"
     [kpin]="Pin the kernel to $PINNED_KERNEL_VER (fixes rebooting after shutdown)"
     [bios]="Update BIOS"

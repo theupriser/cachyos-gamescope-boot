@@ -27,13 +27,17 @@ Steam Machine.
    ([details](TECHNICAL.md#single-user-mode-sddm-no-locking)).
 5. **Steamify shortcut** - an icon on the desktop and in the launcher that
    opens the newest Steamify, so you don't need the install command again.
+6. **HDMI-CEC** (experimental, off by default) - use Steam with your TV's
+   remote, and the TV turns on and off with the PC. Needs a GPU with CEC (like
+   the Steam Machine) or a USB CEC adapter
+   ([details](TECHNICAL.md#hdmi-cec)).
 
 ## Steam Machine
 
 On a Valve Steam Machine the menu has two more items:
 
 - **Steam Machine support** - the front **LED bar** works, Steam's
-  **hardware settings** (fan, TV control over HDMI-CEC) work, and the power
+  **hardware settings** (fan, performance) work, and the power
   button puts it to sleep like a console.
   - **Pin the kernel to 7.1.6-1** - on by default: with newer CachyOS kernels
     the Steam Machine reboots instead of shutting down. Untick it once CachyOS

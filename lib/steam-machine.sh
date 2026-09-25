@@ -344,6 +344,7 @@ kernel_overview() {
         fi
         echo -e "  ${running}${line}"
     done
+    cec_status && { echo; echo -e "    $(cec_overview)"; }
     if [[ "$leds" == true ]]; then
         local loaded="$miss" nodes
         lsmod | grep -q '^leds_valve' && loaded="$mark"

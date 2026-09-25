@@ -5,6 +5,17 @@ All notable changes, per version and per commit. Versions follow
 `steamify.sh`. Versions before 0.7.0 were numbered afterwards,
 one per merged pull request.
 
+## 1.1.0 - 2026-09-25
+
+- **feat: HDMI-CEC** (experimental, never ticked by default, on every PC)
+  - Valve's `cecd`, `cec-audio-control` and `inputattach-cec-units` from its
+    SteamOS repository (SHA-256 checked): use Steam with the TV remote, and
+    the TV turns on and off with the PC. On a Steam Machine, steamos-manager
+    configures it from Steam's settings.
+  - Works with any `/dev/cec*` (GPU or USB adapter); the menu lists them.
+  - The README no longer says Steam Machine support alone gives HDMI-CEC:
+    `cecd` wasn't installed, so it didn't.
+
 ## 1.0.0 - 2026-09-25
 
 - **feat: Pin the kernel to 7.1.6-1 on a Steam Machine**
