@@ -545,9 +545,12 @@ ApplicationWindow {
             Column {
                 x: 40; y: 32; width: 740; spacing: 14
                 Text { text: plan.length === 0 ? "Nothing to change" : "This will"; color: t.text; font.family: t.display; font.pixelSize: 34; font.weight: Font.DemiBold }
-                Repeater {
+                ListView {
+                    width: 740; clip: true; spacing: 8
+                    height: Math.min(contentHeight, stage.height - header.height - 32 - 50 - 14 - 66 - 64 - 32)
                     model: plan
-                    Rectangle { required property var modelData; width: 740; height: 56; radius: 12; color: t.card
+                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                    delegate: Rectangle { required property var modelData; width: 740; height: 56; radius: 12; color: t.card
                         readonly property var st: ({ on: ["Turn on", t.good, t.goodBg], off: ["Turn off", t.bad, t.badBg], again: ["Re-apply", "#7cc4ff", "#1b2b40"],
                                                      desktop: ["Desktop", "#7cc4ff", "#1b2b40"], gaming: ["Gaming", "#7cc4ff", "#1b2b40"],
                                                      check: ["Check", t.warn, t.warnBg], flash: ["Flash", t.bad, t.badBg] })[modelData.action] || ["", t.text, t.card]
@@ -632,9 +635,16 @@ ApplicationWindow {
                 Row { width: 560
                     Text { text: "Step " + Math.min(plan.length, doneCount + 1) + " of " + plan.length; color: t.mute; font.family: t.body; font.pixelSize: 14; width: 280 }
                     Text { text: "Don't turn off the PC"; color: t.mute; font.family: t.body; font.pixelSize: 14; width: 280; horizontalAlignment: Text.AlignRight } }
-                Repeater {
+                ListView {
+                    id: stepList; width: 560; clip: true; spacing: 8
+                    height: stage.height - header.height - 32 - 156 - 32
                     model: plan
-                    Rectangle { required property var modelData; readonly property string st: steps[modelData.id] || "wait"
+                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                    // Follow the progress: the running step stays in view.
+                    readonly property int running: plan.findIndex(function (p) { return steps[p.id] === "run"; })
+                    onRunningChanged: if (running >= 0) positionViewAtIndex(running, ListView.Contain)
+                    delegate:
+                    Rectangle { required property var modelData; required property int index; readonly property string st: steps[modelData.id] || "wait"
                         width: 560; height: 54; radius: 12; color: st === "run" ? t.cardSel : t.card; border.width: st === "run" ? 2 : 0; border.color: t.accent
                         Row { anchors.fill: parent; anchors.leftMargin: 18; anchors.rightMargin: 18; spacing: 14
                             Rectangle { width: 22; height: 22; radius: 11; anchors.verticalCenter: parent.verticalCenter
