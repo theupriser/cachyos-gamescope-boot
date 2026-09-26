@@ -131,3 +131,11 @@ Contributing (or an AI agent)? Read [AGENTS.md](AGENTS.md).
 ## License
 
 MIT - do whatever you want with it. See [LICENSE.md](LICENSE.md).
+
+## Disclaimer
+
+Steamify CachyOS is an unofficial community project. It is not affiliated
+with, endorsed by, or sponsored by Valve Corporation or the CachyOS project.
+Steam, SteamOS and the Steam logo are trademarks of Valve Corporation. CachyOS
+is the name of its respective project. They are used here only to describe
+what this script works with.
