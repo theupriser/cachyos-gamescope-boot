@@ -188,6 +188,14 @@ gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
   newline. Build the EDID from the DDC read, not from sysfs: a live override
   replaces the kernel's copy. The kernel command-line value holds a path, so
   `sed` uses `|` as its delimiter.
+- Steam Machine CEC driver (`cec_driver_enable`, `lib/cec.sh`): mainline
+  `cros_ec_cec` lacks Fremont, so HDMI-CEC builds Valve's copy (evlaV
+  `linux-integration`, pinned commit + SHA-256) with DKMS for every kernel.
+  It's patched to register its notifier without a port name when the board
+  has one CEC port: amdgpu registers its HDMI notifier nameless, and the
+  kernel only pairs that with a named lookup ("Port C") when the CEC driver
+  registered first, which never happens since amdgpu loads from the
+  initramfs. Without it `/dev/cec0` exists but stays at `f.f.f.f`.
 - `Relogin=true` means a gamescope that fails to start is relaunched in a
   tight loop; keep that in mind when changing session handling.
 
