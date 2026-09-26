@@ -5,9 +5,18 @@ All notable changes, per version and per commit. Versions follow
 `steamify.sh`. Versions before 0.7.0 were numbered afterwards,
 one per merged pull request.
 
+## 2.0.3 - 2026-09-26
+
+- **fix: HDMI-CEC on the Steam Machine**
+  - Mainline's `cros_ec_cec` driver doesn't know the Steam Machine, so there
+    was no `/dev/cec0`. HDMI-CEC now builds Valve's version of the driver
+    with DKMS (`steamify-cros-ec-cec`) for every installed kernel, with a fix
+    so it finds amdgpu's HDMI port even though amdgpu loads first. An
+    existing HDMI-CEC install is ticked in the menu to add it.
+
 ## 2.0.2 - 2026-09-26
 
-- **docs: Non-affiliation disclaimer in the README**
+- **badfd84 docs: Non-affiliation disclaimer in the README**
   - States that the project isn't affiliated with Valve or CachyOS, and that
     Steam and SteamOS are Valve's trademarks.
 

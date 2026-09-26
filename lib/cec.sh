@@ -3,8 +3,9 @@
 # volume control (cec-audio-control) and the units that attach USB CEC
 # adapters (Pulse-Eight, RainShadow) with inputattach. They're only in
 # Valve's SteamOS (holo) repository, not in CachyOS or the AUR. Works with
-# any /dev/cec*: a GPU with CEC (e.g. the Steam Machine) or a USB adapter.
-# On a Steam Machine, steamos-manager configures cecd from Steam's settings.
+# any /dev/cec*: a GPU with CEC or a USB adapter. On a Steam Machine it also
+# builds Valve's CEC driver (see cec_driver_enable), and steamos-manager
+# configures cecd from Steam's settings.
 # Sourced by steamify.sh; not meant to be run on its own.
 
 CEC_PKGS=(cecd cec-audio-control inputattach-cec-units)
@@ -16,6 +17,15 @@ CEC_ORDER_DROPIN=/etc/systemd/user/steamos-manager.service.d/10-steamify-after-c
 # file. A later EnvironmentFile= overrides it.
 CEC_STEAM_ENV=/etc/steamify/steam-cec.env
 CEC_STEAM_DROPIN=/etc/systemd/user/steam-launcher.service.d/10-steamify-cec.conf
+# The Steam Machine's CEC runs through its embedded controller (cros_ec_cec).
+# Mainline's driver doesn't list Fremont, so there's no /dev/cec0; Valve's
+# kernel does. We build Valve's copy with DKMS for every kernel, pinned to a
+# reviewed commit.
+CEC_DKMS_NAME=steamify-cros-ec-cec
+CEC_DKMS_VER=1
+CEC_DKMS_SRC="/usr/src/$CEC_DKMS_NAME-$CEC_DKMS_VER"
+CEC_DRIVER_URL="https://raw.githubusercontent.com/evlaV/linux-integration/10c8c8800ccd3ae359203b4eefb6479f613b3b8e/drivers/media/cec/platform/cros-ec/cros-ec-cec.c"
+CEC_DRIVER_SHA256=e89fd4e87fceb32d713ffc59b64794779b3c2b3c012b0e2f2e9f0c40b42f4373
 
 cec_link_steamos_manager() {
     # On a Steam Machine: steamos-manager writes cecd's config from Steam's
@@ -33,9 +43,69 @@ cec_link_steamos_manager() {
 }
 
 cec_installed() { pacman -Q "${CEC_PKGS[@]}" >/dev/null 2>&1; }
-# On = installed and Steam told to show its CEC settings. An install from
-# before 1.1.3 lacks the latter; the menu then ticks it (see cec_repair).
-cec_status() { cec_installed && [[ -f "$CEC_STEAM_DROPIN" ]]; }
+cec_driver_ok() { ! detect_valve_fremont || [[ -d "$CEC_DKMS_SRC" ]]; }
+# On = installed, Steam told to show its CEC settings and, on a Steam
+# Machine, the driver built. An install from before 1.1.3 (settings) or
+# 2.0.3 (driver) lacks one; the menu then ticks it (see cec_repair).
+cec_status() { cec_installed && [[ -f "$CEC_STEAM_DROPIN" ]] && cec_driver_ok; }
+
+cec_reload_driver() {
+    # cecd keeps /dev/cec0 open, so the old module can't be unloaded under it.
+    systemctl --user stop cecd.service 2>/dev/null
+    sudo modprobe -r cros_ec_cec 2>/dev/null
+    sudo modprobe cros_ec_cec 2>/dev/null
+    systemctl --user start cecd.service 2>/dev/null
+}
+
+cec_driver_enable() {
+    detect_valve_fremont || return 0
+    local tmp k
+    if ! pacman -Q dkms >/dev/null 2>&1; then
+        sudo pacman -S --needed --noconfirm dkms || { err "Installing dkms failed."; return 1; }
+    fi
+    install_kernel_headers || return 1
+    tmp="$(mktemp -d)"
+    info "Downloading Valve's Steam Machine CEC driver..."
+    if ! curl -fsL "$CEC_DRIVER_URL" -o "$tmp/cros-ec-cec.c" ||
+        ! echo "$CEC_DRIVER_SHA256  $tmp/cros-ec-cec.c" | sha256sum -c --quiet -; then
+        rm -rf "$tmp"
+        err "Downloading Valve's CEC driver failed (or its checksum didn't match)."
+        return 1
+    fi
+    # amdgpu registers its HDMI notifier without a port name, which only
+    # matches the driver's named lookup ("Port C") if the driver loaded
+    # first; amdgpu loads from the initramfs, so it never does. With a
+    # single CEC port, look it up by device alone.
+    sed -i 's/cec_notifier_cec_adap_register(hdmi_dev, conns\[port_num\],/cec_notifier_cec_adap_register(hdmi_dev, conns[1] ? conns[port_num] : NULL,/' \
+        "$tmp/cros-ec-cec.c"
+    grep -q 'conns\[1\] ? conns\[port_num\] : NULL' "$tmp/cros-ec-cec.c" ||
+        { rm -rf "$tmp"; err "Patching Valve's CEC driver failed."; return 1; }
+    echo 'obj-m += cros-ec-cec.o' >"$tmp/Makefile"
+    printf '%s\n' "# Written by Steamify: Valve's cros_ec_cec, which knows the Steam Machine." \
+        "PACKAGE_NAME=\"$CEC_DKMS_NAME\"" "PACKAGE_VERSION=\"$CEC_DKMS_VER\"" \
+        'BUILT_MODULE_NAME[0]="cros-ec-cec"' 'DEST_MODULE_LOCATION[0]="/updates/dkms"' \
+        'AUTOINSTALL="yes"' >"$tmp/dkms.conf"
+    sudo dkms remove "$CEC_DKMS_NAME/$CEC_DKMS_VER" --all >/dev/null 2>&1
+    sudo rm -rf "$CEC_DKMS_SRC"
+    sudo install -d "$CEC_DKMS_SRC" && sudo install -m644 "$tmp"/{cros-ec-cec.c,Makefile,dkms.conf} "$CEC_DKMS_SRC/"
+    rm -rf "$tmp"
+    sudo dkms add "$CEC_DKMS_NAME/$CEC_DKMS_VER" >/dev/null || { err "Adding the CEC driver to DKMS failed."; return 1; }
+    # Every kernel with headers; one that fails to build only lacks CEC.
+    for k in /usr/lib/modules/*/build; do
+        k="$(basename "$(dirname "$k")")"
+        info "Building the CEC driver for $k..."
+        sudo dkms install "$CEC_DKMS_NAME/$CEC_DKMS_VER" -k "$k" >/dev/null ||
+            warn "Building the CEC driver for $k failed; that kernel has no HDMI-CEC."
+    done
+    cec_reload_driver
+}
+
+cec_driver_disable() {
+    [[ -d "$CEC_DKMS_SRC" ]] || return 0
+    sudo dkms remove "$CEC_DKMS_NAME/$CEC_DKMS_VER" --all >/dev/null 2>&1
+    sudo rm -rf "$CEC_DKMS_SRC"
+    cec_reload_driver
+}
 cec_repair() { cec_installed && ! cec_status; }
 
 fetch_holo_pkg() {
@@ -79,6 +149,7 @@ cec_enable() {
         return 1
     fi
     rm -rf "$tmp"
+    cec_driver_enable || return 1
     # Its udev rule gives the user /dev/cec*; cecd starts with the graphical
     # session, after steamos-manager wrote its config from Steam's settings.
     sudo udevadm control --reload
@@ -108,6 +179,7 @@ cec_disable() {
     systemctl --user disable --now cecd.service cec-audio-control.socket cec-audio-control.service 2>/dev/null
     systemctl --user disable steamos-manager-configure-cecd.service 2>/dev/null
     sudo pacman -Rns --noconfirm "${CEC_PKGS[@]}" 2>/dev/null
+    cec_driver_disable
     sudo rm -f "$CEC_ORDER_DROPIN" "$CEC_STEAM_DROPIN" "$CEC_STEAM_ENV"
     sudo rmdir "$(dirname "$CEC_ORDER_DROPIN")" "$(dirname "$CEC_STEAM_DROPIN")" "$(dirname "$CEC_STEAM_ENV")" 2>/dev/null
     systemctl --user daemon-reload
