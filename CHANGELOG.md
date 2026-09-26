@@ -7,7 +7,13 @@ one per merged pull request.
 
 ## 2.1.0 - 2026-09-26
 
-- **feat: HDMI refresh boost per display, with a Saved displays screen**
+- **feat(ui): Manage button for HDMI refresh boost**
+  - The item's switch is a button: Set up… while no display is saved,
+    Manage after that. Manage lists the saved displays (connected or not),
+    removes one with its Remove button, and sets up the connected display
+    when it has no saved rates yet.
+- **4cc87aa feat: HDMI refresh boost per display, with a Saved displays screen**
+- **36d0a9d feat: HDMI refresh boost only for the display it was set up for**
   - The EDID override was on the kernel command line, so any display on that
     HDMI port got the first display's timings. Rates are now saved per
     display and loaded at boot and at every hotplug for the display that's
@@ -17,7 +23,6 @@ one per merged pull request.
     re-applied (`a`).
   - The item shows on only while the connected display is boosted, so a new
     display can be set up by ticking it; unticking removes only that one.
-  - The app lists the saved displays (▶ on the item) and removes any of them.
 
 ## 2.0.3 - 2026-09-26
 

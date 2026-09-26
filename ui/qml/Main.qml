@@ -74,7 +74,7 @@ ApplicationWindow {
                 changes: ["linux-cachyos from Steamify's release (signature checked)", "Kept in /var/cache/steamify/kernel", "Added to IgnorePkg"] },
         hdmi: { label: "HDMI refresh boost", hint: "Higher refresh rates over HDMI",
                 body: "The pinned kernel keeps many HDMI displays at 60 Hz. Turning this on shows which refresh rates your display can run at the desktop resolution; you pick them, and each one is tried for 15 seconds so you can check the picture before it's installed.",
-                changes: ["The display's EDID with the rates you confirmed, saved for that display only", "Loaded whenever that display is connected; other displays keep their own settings", "Off: the connected display uses its own EDID again", "Saved displays: ▶ on this row lists them, to remove one"] },
+                changes: ["The display's EDID with the rates you confirmed, saved for that display only", "Loaded whenever that display is connected; other displays keep their own settings", "Manage: every saved display, remove one or set up the connected display"] },
         bios: { label: "Update BIOS", hint: "",
                 body: "Installs Valve's newest Steam Machine BIOS, at your own risk. It checks Valve's checksum and asks fwupd whether the file fits this machine, then warns you twice before anything is written.",
                 changes: ["Valve's fremont-hw-support package (checksum checked)", "fwupd writes the BIOS during the next restart", "Keep the power on until the machine has fully started again"] }
@@ -196,7 +196,7 @@ ApplicationWindow {
     // HDMI refresh boost, saved displays: [{id, name, mode, rates, active}].
     readonly property var hdmiSaved: status.hdmiDisplays || []
     property int hdmiListSel: 0
-    property string hdmiConfirm: ""          // the display to remove on a second press
+    property string hdmiConfirm: ""          // the display being removed
     function hdmiRowHint() {
         var on = hdmiSaved.filter(function (d) { return d.active; });
         var others = hdmiSaved.length - on.length;
@@ -204,6 +204,8 @@ ApplicationWindow {
         if (others) return "Not set up for this display · " + others + " saved";
         return "";
     }
+    // Manage offers setting up the connected display when it has no saved rates.
+    readonly property bool hdmiCanAdd: !hdmiSaved.some(function (d) { return d.active; })
     function openHdmiList() {
         if (!hdmiSaved.length) return;
         hdmiListSel = 0; hdmiConfirm = ""; hdmiNote = ""; screen = "hdmilist";
@@ -211,8 +213,7 @@ ApplicationWindow {
     function hdmiForget() {
         var d = hdmiSaved[hdmiListSel];
         if (!d) return;
-        // A second press removes it: nothing to undo but testing again.
-        if (hdmiConfirm !== d.id) { hdmiConfirm = d.id; return; }
+        hdmiConfirm = d.id;
         if (!sessionPassword && askPassword("forget")) return;
         hdmiForgetNow();
     }
@@ -243,6 +244,7 @@ ApplicationWindow {
         if (id === "single" && w.single) w.gaming = true;
         // Turning HDMI refresh boost on goes through its own screen: pick
         // the rates and try each one first.
+        if (id === "hdmi" && !hdmiChoice && hdmiSaved.length) { openHdmiList(); return; }
         if (id === "hdmi" && w.hdmi && !nowOn("hdmi") && !hdmiChoice) { startHdmi(); return; }
         if (id === "hdmi" && !w.hdmi) hdmiChoice = "";
         if (id === "machine") w.kpin = w.machine;
@@ -399,7 +401,6 @@ ApplicationWindow {
             }
             else if ((a === "left" || a === "right") && sel < rows.length && rows[sel].kind === "choice")
                 boot = a === "left" ? "gamescope" : "desktop";
-            else if (a === "right" && sel < rows.length && rows[sel].id === "hdmi") openHdmiList();
             else if (a === "apply") goReview(false);
             else if (a === "reapply") goReview(true);
             else if (a === "back") Qt.quit();
@@ -432,9 +433,9 @@ ApplicationWindow {
         } else if (screen === "hdmilist") {
             if (backend.busy) return;
             if (a === "up") { hdmiListSel = Math.max(0, hdmiListSel - 1); hdmiConfirm = ""; }
-            else if (a === "down") { hdmiListSel = Math.min(hdmiSaved.length - 1, hdmiListSel + 1); hdmiConfirm = ""; }
-            else if (a === "accept") hdmiForget();
-            else if (a === "back") { if (hdmiConfirm) hdmiConfirm = ""; else hdmiListBack(); }
+            else if (a === "down") { hdmiListSel = Math.min(hdmiSaved.length - (hdmiCanAdd ? 0 : 1), hdmiListSel + 1); hdmiConfirm = ""; }
+            else if (a === "accept") { if (hdmiListSel === hdmiSaved.length) { hdmiConfirm = ""; startHdmi(); } else hdmiForget(); }
+            else if (a === "back") hdmiListBack();
         } else if (screen === "hdmitest") {
             if (a === "accept" || a === "apply") hdmiKeep();
             else if (a === "back") hdmiReject();
@@ -545,7 +546,7 @@ ApplicationWindow {
                 anchors.left: parent.left; anchors.leftMargin: 40; anchors.verticalCenter: parent.verticalCenter; spacing: 14
                 Image { source: iconUrl; width: 40; height: 40; sourceSize: Qt.size(80, 80); anchors.verticalCenter: parent.verticalCenter }
                 Text { text: "Steamify"; color: t.text; font.family: t.display; font.pixelSize: 28; font.weight: Font.Bold; anchors.verticalCenter: parent.verticalCenter }
-                Text { text: screen === "menu" ? "v" + (status.version || "") : "/ " + ({review: "Review", password: "Password", applying: biosRun ? "BIOS update" : "Applying", done: "Done", bios1: "BIOS update", bios2: "BIOS update", hdmi: "HDMI refresh boost", hdmitest: "HDMI refresh boost", hdmilist: "Saved displays"})[screen]
+                Text { text: screen === "menu" ? "v" + (status.version || "") : "/ " + ({review: "Review", password: "Password", applying: biosRun ? "BIOS update" : "Applying", done: "Done", bios1: "BIOS update", bios2: "BIOS update", hdmi: "HDMI refresh boost", hdmitest: "HDMI refresh boost", hdmilist: "HDMI refresh boost"})[screen]
                        color: t.faint; font.family: screen === "menu" ? t.mono : t.body; font.pixelSize: screen === "menu" ? 13 : 15; anchors.verticalCenter: parent.verticalCenter }
             }
             Rectangle {
@@ -598,7 +599,7 @@ ApplicationWindow {
                             readonly property bool selected: shown && rowIndex === sel
                             readonly property bool on: modelData.kind === "choice" ? true : !!want[modelData.id]
                             // HDMI refresh boost is set up on its own screen: a button while off.
-                            readonly property bool setup: modelData.id === "hdmi" && !modelData.on
+                            readonly property bool setup: modelData.id === "hdmi"
                             onSelectedChanged: if (selected) Qt.callLater(list.showSelected)
                             width: list.width - 12; x: 2
                             height: shown ? 62 : 0
@@ -650,8 +651,8 @@ ApplicationWindow {
                                         width: sut.implicitWidth + 24; height: 30; radius: 8; color: hdmiChoice && want.hdmi ? t.goodBg : "#1b2b40"
                                         Text { id: sut; anchors.centerIn: parent; font.family: t.body; font.pixelSize: 13; font.weight: Font.DemiBold
                                                color: hdmiChoice && want.hdmi ? t.good : "#7cc4ff"
-                                               text: hdmiChoice && want.hdmi ? (hdmiChoice.split(":")[1] ? hdmiChoice.split(":")[1].split(",").join(", ") + " Hz ✓" : "Own modes ✓") : "Set up…" }
-                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { sel = row.rowIndex; startHdmi(); } } }
+                                               text: hdmiChoice && want.hdmi ? (hdmiChoice.split(":")[1] ? hdmiChoice.split(":")[1].split(",").join(", ") + " Hz ✓" : "Own modes ✓") : (hdmiSaved.length ? "Manage" : "Set up…") }
+                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { sel = row.rowIndex; toggle("hdmi"); } } }
                                     // action
                                     Rectangle { visible: row.modelData.kind === "action"; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                                         width: at.implicitWidth + 24; height: 30; radius: 8; color: t.warnBg
@@ -690,8 +691,6 @@ ApplicationWindow {
                                 Text { text: "WHAT IT CHANGES"; color: t.faint; font.family: t.body; font.pixelSize: 12; font.weight: Font.DemiBold; font.letterSpacing: 0.8; topPadding: 4 }
                                 Repeater { model: detail.tx.changes || []
                                     Text { required property string modelData; text: "•  " + modelData; color: t.soft; font.family: t.body; font.pixelSize: 14; wrapMode: Text.WordWrap; width: detailCol.width } }
-                                Btn { visible: !!detail.it && detail.it.id === "hdmi" && hdmiSaved.length > 0; k: "▶"; height: 40
-                                      text: "Saved displays (" + hdmiSaved.length + ")"; onClicked: openHdmiList() }
                             }
                         }
                         Column {
@@ -722,7 +721,7 @@ ApplicationWindow {
                 Row {
                     anchors.left: parent.left; anchors.leftMargin: 40; anchors.verticalCenter: parent.verticalCenter; spacing: 28
                     Repeater {
-                        model: [[g.toggle, "Toggle"], sel < rows.length && rows[sel].id === "hdmi" && hdmiSaved.length ? ["▶", "Saved displays"] : [g.choose, "Choose"], [g.reapply, "Re-apply what's on"], [g.quit, "Quit"]]
+                        model: [[g.toggle, "Toggle"], [g.choose, "Choose"], [g.reapply, "Re-apply what's on"], [g.quit, "Quit"]]
                         Row { required property var modelData; spacing: 8
                             Glyph { k: parent.modelData[0]; anchors.verticalCenter: parent.verticalCenter }
                             Text { text: parent.modelData[1]; color: "#b8c3d1"; font.family: t.body; font.pixelSize: 14; anchors.verticalCenter: parent.verticalCenter } }
@@ -1012,7 +1011,7 @@ ApplicationWindow {
             Column {
                 visible: hdmiSaved.length > 0
                 x: 40; y: 28; width: 740; spacing: 12
-                Text { text: "Saved displays"; color: t.text; font.family: t.display; font.pixelSize: 30; font.weight: Font.DemiBold }
+                Text { text: "Manage displays"; color: t.text; font.family: t.display; font.pixelSize: 30; font.weight: Font.DemiBold }
                 Text { text: "Each display gets its own rates; they're loaded whenever it's connected."; color: t.mute; font.family: t.body; font.pixelSize: 14 }
                 Repeater {
                     model: hdmiSaved
@@ -1021,7 +1020,7 @@ ApplicationWindow {
                         readonly property bool confirm: hdmiConfirm === modelData.id
                         width: 740; height: 64; radius: 12
                         color: hdmiListSel === index ? t.cardSel : t.card; border.width: hdmiListSel === index ? 2 : 0; border.color: confirm ? t.bad : t.accent
-                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { inputType = "keyboard"; hdmiListSel = parent.index; hdmiForget(); } }
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { inputType = "keyboard"; hdmiListSel = parent.index; } }
                         Column { anchors.left: parent.left; anchors.leftMargin: 18; anchors.verticalCenter: parent.verticalCenter; spacing: 2
                             Text { text: parent.parent.modelData.name; color: t.textHi; font.family: t.body; font.pixelSize: 18; font.weight: Font.DemiBold }
                             Text { text: parent.parent.modelData.mode.replace("x", "×") + (parent.parent.modelData.rates ? "  ·  " + parent.parent.modelData.rates.split(" ").join(", ") + " Hz" : "  ·  its own modes")
@@ -1031,11 +1030,23 @@ ApplicationWindow {
                                    fg: parent.parent.modelData.active ? t.good : "#b8c3d1"; bgc: parent.parent.modelData.active ? t.goodBg : t.line }
                             Btn { height: 38; anchors.verticalCenter: parent.verticalCenter; focusRing: hdmiListSel === parent.parent.index
                                   k: hdmiListSel === parent.parent.index ? g.ok : ""; color: parent.parent.confirm ? "#8a2c2c" : "#232c38"
-                                  text: parent.parent.confirm ? (backend.busy ? "Removing…" : "Press again to remove") : "Remove"
+                                  text: parent.parent.confirm && backend.busy ? "Removing…" : "Remove"
                                   onClicked: { hdmiListSel = parent.parent.index; hdmiForget(); } }
                         }
                     }
                 }
+            }
+            Rectangle {
+                visible: hdmiSaved.length > 0 && hdmiCanAdd
+                x: 40; y: 28 + 84 + hdmiSaved.length * 76; width: 740; height: 64; radius: 12
+                color: hdmiListSel === hdmiSaved.length ? t.cardSel : t.card; border.width: hdmiListSel === hdmiSaved.length ? 2 : 0; border.color: t.accent
+                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { inputType = "keyboard"; hdmiListSel = hdmiSaved.length; } }
+                Column { anchors.left: parent.left; anchors.leftMargin: 18; anchors.verticalCenter: parent.verticalCenter; spacing: 2
+                    Text { text: "The connected display"; color: t.textHi; font.family: t.body; font.pixelSize: 18; font.weight: Font.DemiBold }
+                    Text { text: "No saved rates yet"; color: t.mute; font.family: t.body; font.pixelSize: 13 } }
+                Btn { anchors.right: parent.right; anchors.rightMargin: 14; anchors.verticalCenter: parent.verticalCenter; height: 38
+                      focusRing: hdmiListSel === hdmiSaved.length; k: hdmiListSel === hdmiSaved.length ? g.ok : ""; text: "Set up…"
+                      onClicked: { hdmiConfirm = ""; startHdmi(); } }
             }
             Rectangle {
                 visible: hdmiSaved.length > 0

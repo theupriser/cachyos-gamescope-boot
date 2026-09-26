@@ -277,8 +277,10 @@ itself doesn't loop.
 The item is on when the connected display runs on its saved EDID; with
 another display it's off, and ticking it sets that one up. Turning it off
 removes the connected display's EDID; the unit and rule go with the last
-one. The app's **Saved displays** screen (▶ on the item) lists every saved
-display and removes any of them. Unpinning the kernel removes them all.
+one. In the app the item is a **Set up…** button, and **Manage** once a
+display is saved: it lists every saved display, removes any of them, and
+sets up the connected display when it has none. Unpinning the kernel
+removes them all.
 
 Versions before 2.1.0 used `drm.edid_firmware=` on the kernel command line
 (and the initramfs), which applied to any display on that port; re-applying
