@@ -186,8 +186,13 @@ gamescope and the Plasma desktop. Primary target: the Valve Steam Machine
   <output>=<w>x<h>:<rates>`; without `--hdmi` the backend refuses it. debugfs is root-only
   (glob it under sudo), and `edid_override` takes exactly `reset` with no
   newline. Build the EDID from the DDC read, not from sysfs: a live override
-  replaces the kernel's copy. The kernel command-line value holds a path, so
-  `sed` uses `|` as its delimiter.
+  replaces the kernel's copy. The override is never on the kernel command
+  line (that applied it to any display on the port): `steamify-edid-hotplug`
+  (boot unit + udev drm hotplug rule) loads it only while the display whose
+  DDC ID is in `/etc/steamify/hdmi-edid.conf` is connected, else resets.
+  It records the state in `/run/steamify-edid` before its own
+  `trigger_hotplug`, whose event runs it again. Pre-2.1.0 command-line
+  setups are removed by `hdmi_remove_boot_param`.
 - Steam Machine CEC driver (`cec_driver_enable`, `lib/cec.sh`): mainline
   `cros_ec_cec` lacks Fremont, so HDMI-CEC builds Valve's copy (evlaV
   `linux-integration`, pinned commit + SHA-256) with DKMS for every kernel.

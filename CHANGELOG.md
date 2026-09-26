@@ -5,6 +5,16 @@ All notable changes, per version and per commit. Versions follow
 `steamify.sh`. Versions before 0.7.0 were numbered afterwards,
 one per merged pull request.
 
+## 2.1.0 - 2026-09-26
+
+- **feat: HDMI refresh boost only for the display it was set up for**
+  - The EDID override was on the kernel command line, so any display on that
+    HDMI port got the first display's timings. It's now loaded at boot and
+    at every hotplug only when the connected display is the one it was
+    tested on (its ID read over DDC); another display, or unplugging, puts
+    the port back on the display's own EDID. No initramfs or boot loader
+    change any more. An existing setup is moved over when re-applied (`a`).
+
 ## 2.0.3 - 2026-09-26
 
 - **fix: HDMI-CEC on the Steam Machine**

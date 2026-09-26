@@ -259,16 +259,24 @@ ticked by default, run from the desktop in Konsole):
    to each step, lowest first. Each one needs a "y" within 15 s
    (`WIZARD_HDMI_CONFIRM_SECONDS` for tests); anything else switches back
    and stops.
-5. Makes it permanent with only the confirmed steps:
-   `/usr/lib/firmware/edid/steamify-<connector>.bin`, in the initramfs via
-   `/etc/mkinitcpio.conf.d/90-steamify-edid.conf` (amdgpu loads from there),
-   and `drm.edid_firmware=<connector>:edid/steamify-<connector>.bin` on the
-   kernel command line: `/etc/default/limine` (`limine-mkinitcpio`),
-   `/etc/sdboot-manage.conf` or `/etc/default/grub`.
+5. Keeps only the confirmed steps, for that display only:
+   `/usr/lib/firmware/edid/steamify-<connector>.bin`, and the display's ID
+   (manufacturer, model, serial, date: EDID bytes 8-17) in
+   `/etc/steamify/hdmi-edid.conf`. `steamify-edid.service` (at boot, before
+   the login manager) and a udev rule (`90-steamify-edid.rules`, every drm
+   hotplug) run `/usr/local/bin/steamify-edid-hotplug`, which reads the
+   connected display's ID over DDC (the real display, even while an override
+   is loaded) and loads the file through debugfs only when it matches.
+   Another display, or no display, resets the port to the display's own
+   EDID, so a different monitor never gets the boosted timings. The state
+   per port is kept in `/run/steamify-edid`, so the hotplug the script
+   triggers itself doesn't loop.
 
-The display's manufacturer, model and serial are stored; re-applying with
-another display connected tests that one instead. Turning it off removes
-the files and the parameter and rebuilds. Untick it before removing the
+Versions before 2.1.0 used `drm.edid_firmware=` on the kernel command line
+(and the initramfs), which applied to any display on that port; re-applying
+moves such a setup over to the hotplug script. Re-applying with another
+display connected tests that one instead. Turning it off removes the files,
+the unit and the rule. Untick it before removing the
 kernel pin: newer kernels read the EDID themselves and can do HDMI 2.1.
 
 ## BIOS updates (Steam Machine)
