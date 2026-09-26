@@ -5,9 +5,15 @@ All notable changes, per version and per commit. Versions follow
 `steamify.sh`. Versions before 0.7.0 were numbered afterwards,
 one per merged pull request.
 
+## 2.0.2 - 2026-09-26
+
+- **docs: Non-affiliation disclaimer in the README**
+  - States that the project isn't affiliated with Valve or CachyOS, and that
+    Steam and SteamOS are Valve's trademarks.
+
 ## 2.0.1 - 2026-09-25
 
-- **feat: The Steamify shortcut opens the app**
+- **2b3f1de feat: The Steamify shortcut opens the app**
   - "Steamify CachyOS" on the desktop and in the launcher starts the newest
     app (in Konsole the first time, if PySide6 still has to be installed).
     The terminal menu is "Steamify Terminal" in the launcher. A shortcut from
