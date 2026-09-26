@@ -163,7 +163,12 @@ kpin_enable() {
     fi
 }
 
-kpin_disable() { remove_kernel_pin; }
+kpin_disable() {
+    # Saved HDMI refresh boost EDIDs are for the pinned kernel only (newer
+    # ones read the whole EDID), also those of displays not connected now.
+    [[ -n "$(hdmi_saved)" ]] && hdmi_forget all
+    remove_kernel_pin
+}
 
 install_kernel_headers() {
     # DKMS can only build leds-valve against kernels whose headers are

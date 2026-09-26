@@ -14,6 +14,8 @@
 #       hdmi-options event: every HDMI output, its mode and rates to offer.
 #   steamify.sh --backend hdmi-try <connector> <w> <h> <hz> [<rate>...]
 #   steamify.sh --backend hdmi-reset <connector> <w> <h> <hz>
+#   steamify.sh --backend hdmi-forget <display id>
+#       removes a saved display (hdmi-forgotten event); status lists them.
 #       switch to a rate live (hdmi-tried event), or back to the display's
 #       own EDID (hdmi-reset event); the app asks in between.
 #   steamify.sh --backend bios-prepare | bios-flash
@@ -68,13 +70,20 @@ backend_status() {
     if bios_available; then
         bios="{\"current\":$(json_str "$(bios_current)"),\"newest\":$(json_str "${BIOS_NEWEST:-}"),\"selectable\":$(bios_selectable && echo true || echo false),\"dryRun\":$([[ -n "$BIOS_DRY_RUN" ]] && echo true || echo false)}"
     fi
-    printf '{"version":%s,"firstRun":%s,"steamMachine":%s,"kernel":%s,"pinnedKernel":%s,"cecDevices":%s,"leds":%s,"bios":%s,"items":[%s]}\n' \
+    # HDMI refresh boost's saved displays; "active" = connected and boosted.
+    local hdmi_list="" active hid hname hmode hrates
+    active=" $(hdmi_active_ids | tr '\n' ' ') "
+    while IFS=$'\t' read -r hid hname hmode hrates; do
+        [[ -n "$hid" ]] || continue
+        hdmi_list+="${hdmi_list:+,}{\"id\":$(json_str "$hid"),\"name\":$(json_str "$hname"),\"mode\":$(json_str "$hmode"),\"rates\":$(json_str "$hrates"),\"active\":$([[ "$active" == *" $hid "* ]] && echo true || echo false)}"
+    done < <(hdmi_saved)
+    printf '{"version":%s,"firstRun":%s,"steamMachine":%s,"kernel":%s,"pinnedKernel":%s,"cecDevices":%s,"leds":%s,"bios":%s,"hdmiDisplays":[%s],"items":[%s]}\n' \
         "$(json_str "$VERSION")" "$first_run" \
         "$(detect_valve_fremont && echo true || echo false)" \
         "$(json_str "$(uname -r)")" "$(json_str "${PINNED_KERNEL_VER:-}")" \
         "$(json_str "$cec")" \
         "$(compgen -G '/sys/class/leds/valve-leds*' | wc -l)" \
-        "$bios" "$items"
+        "$bios" "$hdmi_list" "$items"
 }
 
 backend_run_component() {
@@ -177,7 +186,7 @@ backend_apply() {
 }
 
 backend_hdmi() {
-    # backend_hdmi options|try|reset [args]: the app's HDMI screen. Events
+    # backend_hdmi options|try|reset|forget [args]: the app's HDMI screen. Events
     # only (no "finished"): the app goes on from its own screen.
     local what="$1" rc
     shift
@@ -192,6 +201,9 @@ backend_hdmi() {
         reset)
             hdmi_reset "$@" >/dev/null 2>&1
             backend_event hdmi-reset ;;
+        forget)
+            [[ "${1:-}" =~ ^[0-9a-f]{20}$ ]] && hdmi_forget "$1" >/dev/null 2>&1; rc=$?
+            backend_event hdmi-forgotten "\"id\":$(json_str "${1:-}"),\"ok\":$([[ $rc -eq 0 ]] && echo true || echo false)" ;;
     esac
 }
 
@@ -204,6 +216,7 @@ backend_main() {
         hdmi-options) backend_hdmi options ;;
         hdmi-try) shift; backend_hdmi try "$@" ;;
         hdmi-reset) shift; backend_hdmi reset "$@" ;;
+        hdmi-forget) shift; backend_hdmi forget "$@" ;;
         *) err "Usage: steamify.sh --backend status | apply [--reapply] [--boot gamescope|desktop] <id>..."; return 2 ;;
     esac
 }

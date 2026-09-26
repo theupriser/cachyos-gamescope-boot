@@ -5,6 +5,25 @@ All notable changes, per version and per commit. Versions follow
 `steamify.sh`. Versions before 0.7.0 were numbered afterwards,
 one per merged pull request.
 
+## 2.1.0 - 2026-09-26
+
+- **feat(ui): Manage button for HDMI refresh boost**
+  - The item's switch is a button: Set up… while no display is saved,
+    Manage after that. Manage lists the saved displays (connected or not),
+    removes one with its Remove button, and sets up the connected display
+    when it has no saved rates yet.
+- **4cc87aa feat: HDMI refresh boost per display, with a Saved displays screen**
+- **36d0a9d feat: HDMI refresh boost only for the display it was set up for**
+  - The EDID override was on the kernel command line, so any display on that
+    HDMI port got the first display's timings. Rates are now saved per
+    display and loaded at boot and at every hotplug for the display that's
+    connected (its ID read over DDC); a display without saved rates, or
+    unplugging, puts the port back on the display's own EDID. No initramfs
+    or boot loader change any more. An existing setup is moved over when
+    re-applied (`a`).
+  - The item shows on only while the connected display is boosted, so a new
+    display can be set up by ticking it; unticking removes only that one.
+
 ## 2.0.3 - 2026-09-26
 
 - **fix: HDMI-CEC on the Steam Machine**

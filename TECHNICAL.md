@@ -259,16 +259,32 @@ ticked by default, run from the desktop in Konsole):
    to each step, lowest first. Each one needs a "y" within 15 s
    (`WIZARD_HDMI_CONFIRM_SECONDS` for tests); anything else switches back
    and stops.
-5. Makes it permanent with only the confirmed steps:
-   `/usr/lib/firmware/edid/steamify-<connector>.bin`, in the initramfs via
-   `/etc/mkinitcpio.conf.d/90-steamify-edid.conf` (amdgpu loads from there),
-   and `drm.edid_firmware=<connector>:edid/steamify-<connector>.bin` on the
-   kernel command line: `/etc/default/limine` (`limine-mkinitcpio`),
-   `/etc/sdboot-manage.conf` or `/etc/default/grub`.
+5. Saves the confirmed steps for that display: the EDID as
+   `/usr/lib/firmware/edid/steamify-<id>.bin`, where `<id>` is the display's
+   manufacturer, model, serial and date (EDID bytes 8-17), and a line in
+   `/etc/steamify/hdmi-edid.conf` (id, name, mode, rates). Other saved
+   displays are kept.
 
-The display's manufacturer, model and serial are stored; re-applying with
-another display connected tests that one instead. Turning it off removes
-the files and the parameter and rebuilds. Untick it before removing the
+`steamify-edid.service` (at boot, before the login manager) and a udev rule
+(`90-steamify-edid.rules`, every drm hotplug) run
+`/usr/local/bin/steamify-edid-hotplug`. Per HDMI port it reads the connected
+display's ID over DDC (the real display, even while an override is loaded)
+and loads that display's saved EDID through debugfs, or resets the port to
+the display's own EDID when there is none, or no display. What's loaded per
+port is kept in `/run/steamify-edid`, so the hotplug the script triggers
+itself doesn't loop.
+
+The item is on when the connected display runs on its saved EDID; with
+another display it's off, and ticking it sets that one up. Turning it off
+removes the connected display's EDID; the unit and rule go with the last
+one. In the app the item is a **Set up…** button, and **Manage** once a
+display is saved: it lists every saved display, removes any of them, and
+sets up the connected display when it has none. Unpinning the kernel
+removes them all.
+
+Versions before 2.1.0 used `drm.edid_firmware=` on the kernel command line
+(and the initramfs), which applied to any display on that port; re-applying
+saves such a setup per display and removes the parameter. Untick it before removing the
 kernel pin: newer kernels read the EDID themselves and can do HDMI 2.1.
 
 ## BIOS updates (Steam Machine)
