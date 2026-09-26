@@ -74,7 +74,7 @@ ApplicationWindow {
                 changes: ["linux-cachyos from Steamify's release (signature checked)", "Kept in /var/cache/steamify/kernel", "Added to IgnorePkg"] },
         hdmi: { label: "HDMI refresh boost", hint: "Higher refresh rates over HDMI",
                 body: "The pinned kernel keeps many HDMI displays at 60 Hz. Turning this on shows which refresh rates your display can run at the desktop resolution; you pick them, and each one is tried for 15 seconds so you can check the picture before it's installed.",
-                changes: ["The display's EDID with the rates you confirmed", "In the initramfs, drm.edid_firmware on the kernel command line", "Off: the display uses its own EDID again"] },
+                changes: ["The display's EDID with the rates you confirmed, saved for that display only", "Loaded whenever that display is connected; other displays keep their own settings", "Off: the connected display uses its own EDID again", "Saved displays: ▶ on this row lists them, to remove one"] },
         bios: { label: "Update BIOS", hint: "",
                 body: "Installs Valve's newest Steam Machine BIOS, at your own risk. It checks Valve's checksum and asks fwupd whether the file fits this machine, then warns you twice before anything is written.",
                 changes: ["Valve's fremont-hw-support package (checksum checked)", "fwupd writes the BIOS during the next restart", "Keep the power on until the machine has fully started again"] }
@@ -193,6 +193,31 @@ ApplicationWindow {
 
     readonly property var status: backend.status || ({})
     readonly property var items: status.items || []
+    // HDMI refresh boost, saved displays: [{id, name, mode, rates, active}].
+    readonly property var hdmiSaved: status.hdmiDisplays || []
+    property int hdmiListSel: 0
+    property string hdmiConfirm: ""          // the display to remove on a second press
+    function hdmiRowHint() {
+        var on = hdmiSaved.filter(function (d) { return d.active; });
+        var others = hdmiSaved.length - on.length;
+        if (on.length) return "On for " + on[0].name + (others ? " · " + others + " more saved" : "");
+        if (others) return "Not set up for this display · " + others + " saved";
+        return "";
+    }
+    function openHdmiList() {
+        if (!hdmiSaved.length) return;
+        hdmiListSel = 0; hdmiConfirm = ""; hdmiNote = ""; screen = "hdmilist";
+    }
+    function hdmiForget() {
+        var d = hdmiSaved[hdmiListSel];
+        if (!d) return;
+        // A second press removes it: nothing to undo but testing again.
+        if (hdmiConfirm !== d.id) { hdmiConfirm = d.id; return; }
+        if (!sessionPassword && askPassword("forget")) return;
+        hdmiForgetNow();
+    }
+    function hdmiForgetNow() { screen = "hdmilist"; whenIdle(function () { backend.hdmiForget(sessionPassword, hdmiConfirm); }); }
+    function hdmiListBack() { hdmiConfirm = ""; sessionPassword = ""; syncFromStatus(); screen = "menu"; }
     readonly property var rows: items.filter(function (i) { return !i.parent || want[i.parent]; })
 
     function nowOn(id) {
@@ -274,6 +299,7 @@ ApplicationWindow {
         var p = pw.text; pw.text = "";
         if (pending === "bios") { sessionPassword = p; biosCheck(); }
         else if (pending === "hdmi") { sessionPassword = p; hdmiLoad(); }
+        else if (pending === "forget") { sessionPassword = p; hdmiForgetNow(); }
         else startApply(p);
     }
     // --- BIOS: check -> warning 1 -> warning 2 -> flash ---
@@ -330,7 +356,12 @@ ApplicationWindow {
                 else { hdmiPhase = "failed"; hdmiReject(); }
             }
             else if (ev.event === "hdmi-reset") { }
-            else if (ev.event === "finished" && (screen === "hdmi" || screen === "hdmitest")) {
+            else if (ev.event === "hdmi-forgotten") {
+                hdmiConfirm = "";
+                if (!ev.ok) hdmiNote = "Removing the saved display failed.";
+                backend.refresh();
+            }
+            else if (ev.event === "finished" && (screen === "hdmi" || screen === "hdmitest" || screen === "hdmilist")) {
                 // Only on an error (sudo): the HDMI commands end without one.
                 runError = ev.error === "wrong-password" ? "The password didn't work." : "sudo isn't available.";
                 failed = []; restartNeeded = false; sessionPassword = ""; screen = "done";
@@ -368,6 +399,7 @@ ApplicationWindow {
             }
             else if ((a === "left" || a === "right") && sel < rows.length && rows[sel].kind === "choice")
                 boot = a === "left" ? "gamescope" : "desktop";
+            else if (a === "right" && sel < rows.length && rows[sel].id === "hdmi") openHdmiList();
             else if (a === "apply") goReview(false);
             else if (a === "reapply") goReview(true);
             else if (a === "back") Qt.quit();
@@ -376,7 +408,7 @@ ApplicationWindow {
             else if (a === "back") { reapply = false; screen = "menu"; }
         } else if (screen === "password") {
             if (a === "accept" || a === "apply") submitPassword();
-            else if (a === "back") { pw.text = ""; if (pending === "hdmi") hdmiCancel(); else screen = "review"; }
+            else if (a === "back") { pw.text = ""; if (pending === "hdmi") hdmiCancel(); else if (pending === "forget") { hdmiConfirm = ""; screen = "hdmilist"; } else screen = "review"; }
         } else if (screen === "bios1") {
             if (a === "left") biosFocus = 0;
             else if (a === "right") biosFocus = 1;
@@ -397,6 +429,12 @@ ApplicationWindow {
             // A second Back meant for the test (it takes a moment to switch
             // back) would otherwise leave the whole screen.
             else if (a === "back" && Date.now() - hdmiBackAt > 1500) hdmiCancel();
+        } else if (screen === "hdmilist") {
+            if (backend.busy) return;
+            if (a === "up") { hdmiListSel = Math.max(0, hdmiListSel - 1); hdmiConfirm = ""; }
+            else if (a === "down") { hdmiListSel = Math.min(hdmiSaved.length - 1, hdmiListSel + 1); hdmiConfirm = ""; }
+            else if (a === "accept") hdmiForget();
+            else if (a === "back") { if (hdmiConfirm) hdmiConfirm = ""; else hdmiListBack(); }
         } else if (screen === "hdmitest") {
             if (a === "accept" || a === "apply") hdmiKeep();
             else if (a === "back") hdmiReject();
@@ -507,7 +545,7 @@ ApplicationWindow {
                 anchors.left: parent.left; anchors.leftMargin: 40; anchors.verticalCenter: parent.verticalCenter; spacing: 14
                 Image { source: iconUrl; width: 40; height: 40; sourceSize: Qt.size(80, 80); anchors.verticalCenter: parent.verticalCenter }
                 Text { text: "Steamify"; color: t.text; font.family: t.display; font.pixelSize: 28; font.weight: Font.Bold; anchors.verticalCenter: parent.verticalCenter }
-                Text { text: screen === "menu" ? "v" + (status.version || "") : "/ " + ({review: "Review", password: "Password", applying: biosRun ? "BIOS update" : "Applying", done: "Done", bios1: "BIOS update", bios2: "BIOS update", hdmi: "HDMI refresh boost", hdmitest: "HDMI refresh boost"})[screen]
+                Text { text: screen === "menu" ? "v" + (status.version || "") : "/ " + ({review: "Review", password: "Password", applying: biosRun ? "BIOS update" : "Applying", done: "Done", bios1: "BIOS update", bios2: "BIOS update", hdmi: "HDMI refresh boost", hdmitest: "HDMI refresh boost", hdmilist: "Saved displays"})[screen]
                        color: t.faint; font.family: screen === "menu" ? t.mono : t.body; font.pixelSize: screen === "menu" ? 13 : 15; anchors.verticalCenter: parent.verticalCenter }
             }
             Rectangle {
@@ -584,7 +622,7 @@ ApplicationWindow {
                                     width: controls.x - x - 16
                                     opacity: row.modelData.kind === "action" && !(bios && bios.selectable) ? 0.6 : 1
                                     Text { text: label(row.modelData); color: t.textHi; font.family: t.body; font.pixelSize: 17; font.weight: Font.DemiBold; elide: Text.ElideRight; width: parent.width }
-                                    Text { text: row.modelData.id === "bios" ? biosHint() : ((texts[row.modelData.id] && texts[row.modelData.id].hint) || row.modelData.hint); color: t.mute; font.family: t.body; font.pixelSize: 13; elide: Text.ElideRight; width: parent.width }
+                                    Text { text: row.modelData.id === "bios" ? biosHint() : ((row.modelData.id === "hdmi" && hdmiRowHint()) || (texts[row.modelData.id] && texts[row.modelData.id].hint) || row.modelData.hint); color: t.mute; font.family: t.body; font.pixelSize: 13; elide: Text.ElideRight; width: parent.width }
                                 }
                                 // Right: every control ends on the same edge
                                 Item {
@@ -652,6 +690,8 @@ ApplicationWindow {
                                 Text { text: "WHAT IT CHANGES"; color: t.faint; font.family: t.body; font.pixelSize: 12; font.weight: Font.DemiBold; font.letterSpacing: 0.8; topPadding: 4 }
                                 Repeater { model: detail.tx.changes || []
                                     Text { required property string modelData; text: "•  " + modelData; color: t.soft; font.family: t.body; font.pixelSize: 14; wrapMode: Text.WordWrap; width: detailCol.width } }
+                                Btn { visible: !!detail.it && detail.it.id === "hdmi" && hdmiSaved.length > 0; k: "▶"; height: 40
+                                      text: "Saved displays (" + hdmiSaved.length + ")"; onClicked: openHdmiList() }
                             }
                         }
                         Column {
@@ -682,7 +722,7 @@ ApplicationWindow {
                 Row {
                     anchors.left: parent.left; anchors.leftMargin: 40; anchors.verticalCenter: parent.verticalCenter; spacing: 28
                     Repeater {
-                        model: [[g.toggle, "Toggle"], [g.choose, "Choose"], [g.reapply, "Re-apply what's on"], [g.quit, "Quit"]]
+                        model: [[g.toggle, "Toggle"], sel < rows.length && rows[sel].id === "hdmi" && hdmiSaved.length ? ["▶", "Saved displays"] : [g.choose, "Choose"], [g.reapply, "Re-apply what's on"], [g.quit, "Quit"]]
                         Row { required property var modelData; spacing: 8
                             Glyph { k: parent.modelData[0]; anchors.verticalCenter: parent.verticalCenter }
                             Text { text: parent.modelData[1]; color: "#b8c3d1"; font.family: t.body; font.pixelSize: 14; anchors.verticalCenter: parent.verticalCenter } }
@@ -961,6 +1001,57 @@ ApplicationWindow {
                       visible: !hdmiLoading && !!hdmi && hdmiRates.length > 0; primary: hdmiCanInstall; opacity: hdmiCanInstall ? 1 : 0.5
                       focusRing: hdmiSel === hdmiRates.length
                       text: "Install" + (hdmiKept().length ? " " + hdmiKept().join(", ") + " Hz" : ""); onClicked: hdmiInstall() }
+            }
+        }
+
+        // ================= HDMI: saved displays =================
+        Item {
+            visible: screen === "hdmilist"
+            anchors.top: header.bottom; anchors.bottom: parent.bottom; width: parent.width
+            Text { visible: hdmiSaved.length === 0; anchors.centerIn: parent; text: "No saved displays."; color: t.mute; font.family: t.body; font.pixelSize: 18 }
+            Column {
+                visible: hdmiSaved.length > 0
+                x: 40; y: 28; width: 740; spacing: 12
+                Text { text: "Saved displays"; color: t.text; font.family: t.display; font.pixelSize: 30; font.weight: Font.DemiBold }
+                Text { text: "Each display gets its own rates; they're loaded whenever it's connected."; color: t.mute; font.family: t.body; font.pixelSize: 14 }
+                Repeater {
+                    model: hdmiSaved
+                    Rectangle {
+                        required property var modelData; required property int index
+                        readonly property bool confirm: hdmiConfirm === modelData.id
+                        width: 740; height: 64; radius: 12
+                        color: hdmiListSel === index ? t.cardSel : t.card; border.width: hdmiListSel === index ? 2 : 0; border.color: confirm ? t.bad : t.accent
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { inputType = "keyboard"; hdmiListSel = parent.index; hdmiForget(); } }
+                        Column { anchors.left: parent.left; anchors.leftMargin: 18; anchors.verticalCenter: parent.verticalCenter; spacing: 2
+                            Text { text: parent.parent.modelData.name; color: t.textHi; font.family: t.body; font.pixelSize: 18; font.weight: Font.DemiBold }
+                            Text { text: parent.parent.modelData.mode.replace("x", "×") + (parent.parent.modelData.rates ? "  ·  " + parent.parent.modelData.rates.split(" ").join(", ") + " Hz" : "  ·  its own modes")
+                                   color: t.mute; font.family: t.mono; font.pixelSize: 13 } }
+                        Row { anchors.right: parent.right; anchors.rightMargin: 14; anchors.verticalCenter: parent.verticalCenter; spacing: 12
+                            Chip { anchors.verticalCenter: parent.verticalCenter; text: parent.parent.modelData.active ? "Connected" : "Not connected"
+                                   fg: parent.parent.modelData.active ? t.good : "#b8c3d1"; bgc: parent.parent.modelData.active ? t.goodBg : t.line }
+                            Btn { height: 38; anchors.verticalCenter: parent.verticalCenter; focusRing: hdmiListSel === parent.parent.index
+                                  k: hdmiListSel === parent.parent.index ? g.ok : ""; color: parent.parent.confirm ? "#8a2c2c" : "#232c38"
+                                  text: parent.parent.confirm ? (backend.busy ? "Removing…" : "Press again to remove") : "Remove"
+                                  onClicked: { hdmiListSel = parent.parent.index; hdmiForget(); } }
+                        }
+                    }
+                }
+            }
+            Rectangle {
+                visible: hdmiSaved.length > 0
+                x: parent.width - 468; y: 28; width: 428; height: 200; radius: 16; color: t.card
+                Column { anchors.fill: parent; anchors.margins: 24; spacing: 12
+                    Text { text: "REMOVING"; color: t.faint; font.family: t.body; font.pixelSize: 12; font.weight: Font.DemiBold; font.letterSpacing: 0.8 }
+                    Text { width: parent.width; wrapMode: Text.WordWrap; color: t.soft; font.family: t.body; font.pixelSize: 15; lineHeight: 1.35
+                           text: "A removed display uses its own EDID again (right away when it's connected). To get its rates back, set it up again from the menu." }
+                }
+            }
+            Rectangle {
+                anchors.bottom: parent.bottom; width: parent.width; height: 64; color: t.bar
+                Rectangle { width: parent.width; height: 1; color: t.line }
+                Btn { anchors.left: parent.left; anchors.leftMargin: 40; anchors.verticalCenter: parent.verticalCenter; k: g.back; text: "Back to the menu"; onClicked: hdmiListBack() }
+                Text { anchors.right: parent.right; anchors.rightMargin: 40; anchors.verticalCenter: parent.verticalCenter; visible: !!hdmiNote
+                       text: hdmiNote; color: t.bad; font.family: t.body; font.pixelSize: 14 }
             }
         }
 

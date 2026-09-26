@@ -1,7 +1,7 @@
 #!/bin/bash
 # "HDMI refresh boost" menu item, Steam Machine (Fremont) only: finds the
 # highest refresh rate the display runs at the desktop resolution over HDMI,
-# tests it live and keeps it with an EDID override that's only loaded while
+# tests it live and saves an EDID override per display, loaded only while
 # that display is connected (see hdmi_install_hotplug). Two things keep displays below what they can do:
 # - Monitors put their fast modes in an extra EDID block (HDMI Forum EEODB);
 #   the pinned kernel (7.1.6) only reads the first extension. Newer kernels
@@ -16,8 +16,11 @@
 HDMI_FW_DIR=/usr/lib/firmware/edid
 # Before 2.1.0 the override was on the kernel command line; only removed now.
 HDMI_INITRAMFS_CONF=/etc/mkinitcpio.conf.d/90-steamify-edid.conf
-# "<output> <display id>" per line: which display each EDID file is for.
+# The saved displays, one per line: <id> TAB <name> TAB <w>x<h> TAB <rates>.
+# Their EDIDs are $HDMI_FW_DIR/steamify-<id>.bin.
 HDMI_MAP=/etc/steamify/hdmi-edid.conf
+# Per output, the ID of the display whose EDID is loaded, or "reset".
+HDMI_RUN=/run/steamify-edid
 HDMI_HOTPLUG=/usr/local/bin/steamify-edid-hotplug
 HDMI_UNIT_NAME=steamify-edid.service
 HDMI_UNIT="/etc/systemd/system/$HDMI_UNIT_NAME"
@@ -55,13 +58,25 @@ hdmi_cmdline_param() {
 hdmi_available() {
     # Stays available while on, so it can be turned off after the pin is gone.
     detect_valve_fremont || return 1
-    hdmi_status || { pinned_kernel_installed && [[ -n "$(hdmi_connectors)" ]]; }
+    # Saved displays too, so they can be removed without the pin.
+    hdmi_status || [[ -n "$(hdmi_saved)" ]] || { pinned_kernel_installed && [[ -n "$(hdmi_connectors)" ]]; }
 }
 
 hdmi_status() {
-    # The command line: set up by an older version, re-applying moves it over.
-    { [[ -f "$HDMI_UNIT" ]] || [[ -n "$(hdmi_cmdline_param)" ]]; } &&
-        compgen -G "$HDMI_FW_DIR/steamify-*.bin" >/dev/null
+    # On = the connected display runs on its saved EDID. Another display on
+    # the port is off, so ticking it sets that one up. The command line: set
+    # up by an older version, re-applying moves it over.
+    [[ -n "$(hdmi_active_ids)" ]] ||
+        { [[ -n "$(hdmi_cmdline_param)" ]] && compgen -G "$HDMI_FW_DIR/steamify-*.bin" >/dev/null; }
+}
+
+hdmi_saved() { [[ -f "$HDMI_MAP" ]] && grep -v '^#' "$HDMI_MAP"; }
+
+hdmi_active_ids() {
+    # IDs of the connected displays whose saved EDID is loaded.
+    local f
+    for f in "$HDMI_RUN"/*; do [[ -f "$f" ]] && grep -vx reset "$f"; done
+    return 0
 }
 
 hdmi_edid_tool() {
@@ -171,6 +186,11 @@ if cmd == 'blocks':
     print(nblocks(load(args[0])))
 elif cmd == 'id':
     print(load(args[0])[8:18].hex())
+elif cmd == 'name':
+    e = load(args[0])
+    for o in range(54, 126, 18):
+        if e[o:o + 3] == b'\0\0\0' and e[o + 3] == 0xfc:
+            print(e[o + 5:o + 18].split(b'\n')[0].decode('ascii', 'replace').strip())
 elif cmd == 'plan':
     e = load(args[0]); w, h, cur = int(args[1]), int(args[2]), float(args[3])
     lim, t = tmds_khz(e), shortest(e, w, h)
@@ -351,29 +371,69 @@ hdmi_remove_boot_param() {
     esac
 }
 
-hdmi_install_hotplug() {
-    # The EDID file of an output is only loaded while the display it was
-    # tested on is connected: a udev rule runs the script at every hotplug
-    # (and a unit at boot, before the login manager). The script reads the
-    # display's ID over DDC, which shows the real display even while an
-    # override is loaded, and loads the file or resets to the display's own
-    # EDID. Another display on that port gets its own EDID, and unplugging
-    # resets it, so the next display never starts on the wrong one.
-    local f out map=""
-    for f in "$HDMI_FW_DIR"/steamify-*.bin; do
+hdmi_write_map() {
+    # hdmi_write_map <lines>: the saved displays list.
+    sudo mkdir -p "$(dirname "$HDMI_MAP")"
+    { printf '# Written by steamify: HDMI refresh boost, one display per line:\n'
+      printf '# <id>\t<name>\t<w>x<h>\t<rates>\n'
+      [[ -n "$1" ]] && printf '%s\n' "$1"; } | sudo tee "$HDMI_MAP" >/dev/null
+}
+
+hdmi_save() {
+    # hdmi_save <edid> <w>x<h> <rates>: keep an EDID for the display it was
+    # built from (block 0 is the display's own, so is its ID), replacing
+    # what was saved for that display before.
+    local id name
+    id="$(hdmi_edid_tool id "$1")" && [[ -n "$id" ]] || return 1
+    name="$(hdmi_edid_tool name "$1")"
+    sudo install -Dm644 "$1" "$HDMI_FW_DIR/steamify-$id.bin" || return 1
+    hdmi_write_map "$(hdmi_saved | awk -F'\t' -v i="$id" '$1 != i'
+        printf '%s\t%s\t%s\t%s' "$id" "${name:-HDMI display}" "$2" "$3")"
+}
+
+hdmi_forget() {
+    # hdmi_forget <id>|all: remove saved displays; the hotplug script puts
+    # a connected one back on its own EDID, and goes when none are left.
+    local rest=""
+    if [[ "$1" == all ]]; then
+        sudo rm -f "$HDMI_FW_DIR"/steamify-*.bin
+    else
+        rest="$(hdmi_saved | awk -F'\t' -v i="$1" '$1 != i')"
+        sudo rm -f "$HDMI_FW_DIR/steamify-$1.bin"
+    fi
+    if [[ -z "$rest" ]]; then hdmi_remove_hotplug; return; fi
+    hdmi_write_map "$rest"
+    sudo systemctl restart "$HDMI_UNIT_NAME"
+}
+
+hdmi_migrate() {
+    # Setups before 2.1.0: steamify-<output>.bin on the kernel command line,
+    # the display's ID and mode in the state file. Saved per display now.
+    local f out
+    local -a smode
+    for f in "$HDMI_FW_DIR"/steamify-*-*.bin; do
         [[ -e "$f" ]] || continue
         out="${f##*/steamify-}"; out="${out%.bin}"
-        map+="$out $(state_get hdmi "$out")"$'\n'
+        read -ra smode <<< "$(state_get hdmi "$out-mode")"
+        [[ ${#smode[@]} -ge 2 ]] && hdmi_save "$f" "${smode[0]}x${smode[1]}" "${smode[*]:2}"
+        sudo rm -f "$f"
     done
-    [[ -n "$map" ]] || return 1
-    sudo mkdir -p "$(dirname "$HDMI_MAP")"
-    printf '# Written by steamify: HDMI refresh boost, <output> <display id>.\n%s' "$map" |
-        sudo tee "$HDMI_MAP" >/dev/null || return 1
+    state_clear hdmi
+    hdmi_remove_boot_param
+}
+
+hdmi_install_hotplug() {
+    # A saved EDID is only loaded while its display is connected: a udev
+    # rule runs the script at every hotplug (and a unit at boot, before the
+    # login manager). The script reads the display's ID over DDC, which
+    # shows the real display even while an override is loaded, and loads
+    # that display's file or resets to its own EDID. Unplugging resets too,
+    # so the next display never starts on the wrong one.
     sudo tee "$HDMI_HOTPLUG" > /dev/null << 'EOF'
 #!/bin/bash
-# Steamify CachyOS, HDMI refresh boost: load an output's EDID override only
-# while the display it was made for is connected. Runs as root (debugfs).
-MAP=/etc/steamify/hdmi-edid.conf FW=/usr/lib/firmware/edid RUN=/run/steamify-edid
+# Steamify CachyOS, HDMI refresh boost: load a display's saved EDID only
+# while it is connected. Runs as root (debugfs).
+FW=/usr/lib/firmware/edid RUN=/run/steamify-edid
 modprobe i2c-dev 2>/dev/null
 mkdir -p "$RUN"
 # Hotplug events come in bursts, and the link needs a moment before DDC works.
@@ -381,9 +441,7 @@ sleep 1
 for c in /sys/class/drm/card*-HDMI-A-*; do
     [ -e "$c" ] || continue
     out="${c##*/}"; out="${out#card*-}"
-    want="$(awk -v o="$out" '$1 == o { print $2 }' "$MAP")"
-    [ -n "$want" ] && [ -f "$FW/steamify-$out.bin" ] || continue
-    new=reset
+    new=reset id=""
     if [ "$(cat "$c/status")" = connected ]; then
         bus="$(basename "$(readlink -f "$c/ddc")")"
         for i in 1 2 3 4 5; do
@@ -392,13 +450,13 @@ for c in /sys/class/drm/card*-HDMI-A-*; do
             [ ${#id} -eq 36 ] && break
             sleep 1
         done
-        [ "${id:16}" = "$want" ] && new=override
+        [ ${#id} -eq 36 ] && [ -f "$FW/steamify-${id:16}.bin" ] && new="${id:16}"
     fi
     [ "$(cat "$RUN/$out" 2>/dev/null || echo reset)" = "$new" ] && continue
     for d in /sys/kernel/debug/dri/*/"$out"; do [ -e "$d/edid_override" ] && break; done
     [ -e "$d/edid_override" ] || continue
-    if [ "$new" = override ]; then cat "$FW/steamify-$out.bin" > "$d/edid_override"
-    else printf reset > "$d/edid_override"; fi
+    if [ "$new" = reset ]; then printf reset > "$d/edid_override"
+    else cat "$FW/steamify-$new.bin" > "$d/edid_override"; fi
     # Before the hotplug below, whose own event runs this again.
     echo "$new" > "$RUN/$out"
     echo 1 > "$d/trigger_hotplug"
@@ -430,6 +488,17 @@ EOF
     sudo udevadm control --reload
     sudo systemctl enable "$HDMI_UNIT_NAME" >/dev/null 2>&1 || { err "Enabling $HDMI_UNIT_NAME failed."; return 1; }
     sudo systemctl restart "$HDMI_UNIT_NAME"
+}
+
+hdmi_remove_hotplug() {
+    local conn
+    sudo systemctl disable "$HDMI_UNIT_NAME" >/dev/null 2>&1
+    sudo rm -f "$HDMI_UDEV_RULE" "$HDMI_UNIT" "$HDMI_HOTPLUG" "$HDMI_MAP"
+    sudo rm -rf "$HDMI_RUN"
+    sudo systemctl daemon-reload
+    sudo udevadm control --reload
+    for conn in $(hdmi_connectors); do hdmi_override_live "$conn" reset 2>/dev/null; done
+    return 0
 }
 
 hdmi_tune() {
@@ -570,6 +639,16 @@ hdmi_choose() {
 
 hdmi_enable() {
     local -a HDMI_RESULTS=()
+    if [[ -n "$(hdmi_cmdline_param)" ]]; then
+        info "Moving the EDID override off the kernel command line, so it only applies to its display..."
+        hdmi_migrate && hdmi_install_hotplug || { err "Moving it failed."; return 1; }
+        ok "HDMI refresh boost now only applies to the display it was set up for."
+        return 0
+    fi
+    if hdmi_status; then
+        ok "Already set up for the connected display. Untick and tick it again to re-test."
+        return 0
+    fi
     if [[ "${BACKEND:-false}" == true && ${#HDMI_CHOICE[@]} -eq 0 ]]; then
         err "HDMI refresh boost needs you at the screen: pick and test the rates in the app first."
         return 1
@@ -578,28 +657,10 @@ hdmi_enable() {
         err "Run this from the Plasma desktop: the test switches the display mode through KDE."
         return 1
     fi
-    if hdmi_status; then
-        local conn stale=false
-        for conn in $(hdmi_connectors); do
-            [[ -f "$HDMI_FW_DIR/steamify-${conn#card*-}.bin" ]] || continue
-            [[ "$(state_get hdmi "${conn#card*-}")" == "$(hdmi_edid_tool id "/sys/class/drm/$conn/edid")" ]] || stale=true
-        done
-        if [[ "$stale" == false && -n "$(hdmi_cmdline_param)" ]]; then
-            info "Moving the EDID override off the kernel command line, so it only applies to this display..."
-            hdmi_remove_boot_param && hdmi_install_hotplug || { err "Moving it failed."; return 1; }
-            ok "HDMI refresh boost now only applies to the display it was set up for."
-            return 0
-        fi
-        if [[ "$stale" == false ]]; then
-            ok "Already set up for the connected display(s). Untick and tick it again to re-test."
-            return 0
-        fi
-        warn "Set up for another display; setting up the one connected now."
-        hdmi_disable || return 1
-    fi
     sudo pacman -S --needed --noconfirm i2c-tools python >/dev/null 2>&1 || { err "Installing i2c-tools failed."; return 1; }
 
-    local tmp conn out files=() rc=0 res
+    local tmp conn out res saved=false rc=0
+    local -a smode
     tmp="$(mktemp -d)"
     if [[ ${#HDMI_CHOICE[@]} -gt 0 ]]; then
         # Picked and tested in the app.
@@ -611,34 +672,32 @@ hdmi_enable() {
         done
     fi
     for res in "${HDMI_RESULTS[@]}"; do
-        out="${res%%|*}"
-        sudo install -Dm644 "$tmp/$out.final" "$HDMI_FW_DIR/steamify-$out.bin" || { rc=1; continue; }
-        state_set hdmi "$out" "$(hdmi_edid_tool id "$tmp/$out.orig")"
-        state_set hdmi "$out-mode" "${res#*|}"
-        files+=("$HDMI_FW_DIR/steamify-$out.bin")
+        out="${res%%|*}"; read -ra smode <<< "${res#*|}"
+        hdmi_save "$tmp/$out.final" "${smode[0]}x${smode[1]}" "${smode[*]:2}" && saved=true || rc=1
     done
     rm -rf "$tmp" "$HDMI_CACHE"
-    [[ ${#files[@]} -gt 0 ]] || return $rc
+    [[ "$saved" == true ]] || return $rc
     if ! hdmi_install_hotplug; then
         # Nothing half-done left behind; the live EDID lasts until a restart.
-        hdmi_disable >/dev/null 2>&1
+        hdmi_remove_hotplug
         err "Making it permanent failed; the display is back on its own EDID."
         return 1
     fi
-    ok "HDMI refresh boost is set up for this display; another display gets its own settings."
+    ok "HDMI refresh boost is saved for this display; other displays keep their own settings."
     return $rc
 }
 
 hdmi_disable() {
-    local f conn
-    sudo systemctl disable "$HDMI_UNIT_NAME" >/dev/null 2>&1
-    sudo rm -f "$HDMI_UDEV_RULE" "$HDMI_UNIT" "$HDMI_HOTPLUG" "$HDMI_MAP"
-    sudo rm -rf /run/steamify-edid
-    sudo systemctl daemon-reload
-    sudo udevadm control --reload
-    for f in "$HDMI_FW_DIR"/steamify-*.bin; do [[ -e "$f" ]] && sudo rm -f "$f"; done
-    hdmi_remove_boot_param || return 1
-    for conn in $(hdmi_connectors); do hdmi_override_live "$conn" reset 2>/dev/null; done
-    state_clear hdmi
-    ok "HDMI refresh boost removed; the display uses its own EDID again."
+    # For the connected display; other saved displays stay (the app lists
+    # them). Without the pinned kernel none may stay: newer kernels read the
+    # EDID themselves.
+    local id
+    if [[ -n "$(hdmi_cmdline_param)" ]]; then
+        hdmi_forget all; hdmi_remove_boot_param || return 1; state_clear hdmi
+    elif [[ "${WANTED[kpin]:-1}" == 0 ]] || ! pinned_kernel_installed; then
+        hdmi_forget all
+    else
+        for id in $(hdmi_active_ids); do hdmi_forget "$id"; done
+    fi
+    ok "HDMI refresh boost removed for the connected display; it uses its own EDID again."
 }
